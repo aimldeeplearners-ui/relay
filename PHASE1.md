@@ -36,7 +36,7 @@ This file records the Phase 1 implementation baseline. `FEATURES.md` is the conc
 ## Known Limits and Risks
 
 - No collection runner, sequential execution, request chaining, or report export. Requests are sent individually.
-- OAuth 2.0, WSDL import, SOAP generation, form-data file upload, Postman collection conversion, workspace switching, folder/collection rename, and drag/reordering are not implemented.
+- OAuth 2.0, WSDL import, SOAP generation, form-data file upload, third-party collection conversion, workspace switching, folder/collection rename, and drag/reordering are not implemented.
 - JSON Schema/XPath assertion editors are not in the UI.
 - Request tabs and history do not restore after restart.
 - In Phase 1, workspace JSON included auth credentials and environment values as plaintext. Phase 2 Step 4 now migrates recognized credentials and protects marked values with OS storage; unmarked raw body text and URL values still require care.

@@ -90,7 +90,7 @@ The native file dialog accepts Relay JSON only. The main process parses and vali
 - If the imported file is a full Relay workspace, its top-level items are inserted at root or grouped inside a nested imported folder.
 - Existing collections and requests are preserved. Conflicting names are suffixed. Environment name conflicts with different values are retained as separate suffixed environments.
 
-Postman exports are not converted or imported. Postman scripts are not executed.
+Third-party API-client exports are not converted or imported. Collection scripts are not executed.
 
 ### Export
 
@@ -109,7 +109,7 @@ Export snapshots the latest active-request edits and opens a native Save dialog.
 - Only one workspace is supported. Multiple collections are supported within it.
 - Collections and folders can be created. Requests can be created, renamed, and deleted; folders and collections can be deleted with confirmation. Moving/reordering items and renaming containers are not implemented.
 - Collection runner, run readiness, run-scoped JSON Pointer extraction, bounded offset pagination, and sanitized JSON/CSV/HTML report export are implemented. Extraction and pagination work only during collection runs; individual requests use only the selected saved environment and send once.
-- Postman Collection import, OAuth2 grants other than password, refresh-token handling, form-data file upload, request-history replay, and working Settings/workspace-switcher actions are not implemented. Copy as cURL is implemented in the main process and requires confirmation before writing potentially sensitive request data to the clipboard.
+- Third-party collection import/conversion, OAuth2 grants other than password, refresh-token handling, form-data file upload, request-history replay, and working Settings/workspace-switcher actions are not implemented. Copy as cURL is implemented in the main process and requires confirmation before writing potentially sensitive request data to the clipboard.
 
 ## Development Checks
 

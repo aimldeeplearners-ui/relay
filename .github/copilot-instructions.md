@@ -4,7 +4,7 @@
 This project is a desktop-based API testing application built with **Electron, React, TypeScript, and Tailwind CSS**. 
 - **Core Focus:** Dedicated exclusively to **REST** and **SOAP** APIs.
 - **Specification:** All collection files, import/export operations, and state schemas must strictly adhere to **`RestSoapSpecEnterprise v2.0`** (stored in `spec/rest-soap-spec.json`).
-- **Forbidden:** Do not introduce support for GraphQL, gRPC, WebSockets, or Postman's legacy JavaScript sandbox (`pm.test` scripting). Use declarative validations (JSON Schema and XPath) instead.
+- **Forbidden:** Do not introduce support for GraphQL, gRPC, WebSockets, or a collection JavaScript sandbox (`pm.test` scripting). Use declarative validations (JSON Schema and XPath) instead.
 
 ---
 
@@ -29,7 +29,7 @@ When generating code or suggesting packages, adhere strictly to these libraries:
 * **Shared types (`src/shared/api.ts`):** Defines the collection, request, environment, response, and IPC contracts.
 * Collection items are recursive. Optional `type` distinguishes `collection` and `folder`; request items carry a `request`. Untyped legacy items remain accepted by the schema.
 
-The product specification describes planned target behavior. Check `FEATURES.md` before assuming a capability is implemented; the current phase supports sequential collection runs, readiness checks, bounded offset pagination, declarative JSON Pointer extraction, JSON Schema/XPath assertion editors, confirmed Copy as cURL, and sanitized JSON/CSV/HTML reports, but not raw Postman import or JavaScript scripts.
+The product specification describes planned target behavior. Check `FEATURES.md` before assuming a capability is implemented; the current phase supports sequential collection runs, readiness checks, bounded offset pagination, declarative JSON Pointer extraction, JSON Schema/XPath assertion editors, confirmed Copy as cURL, and sanitized JSON/CSV/HTML reports, but not third-party collection import or JavaScript scripts.
 
 ---
 

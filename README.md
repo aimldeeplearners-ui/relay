@@ -11,7 +11,7 @@ Relay is a Windows desktop application for building and testing REST and SOAP HT
 - Copy the active request as a PowerShell-compatible cURL command after confirmation.
 - Export sanitized JSON, CSV, or HTML collection-run reports.
 
-Relay is a REST/SOAP testing client, not a raw Postman collection importer. It imports Relay-format JSON. Postman scripts, file uploads, cursor pagination, multiple workspaces, and request-history replay are not supported.
+Relay imports its own JSON collection format only. Scripted collections, file uploads, cursor pagination, multiple workspaces, and request-history replay are not supported.
 
 ## Requirements
 
@@ -55,7 +55,7 @@ npm run build
 
 Workspace data is stored locally. Credential values use Electron `safeStorage` when available; collection exports redact protected values by default. Treat exported commands and any export that includes secrets as sensitive.
 
-Before pushing or publishing this repository, review collection files for internal hostnames, identifiers, or company data. `.gitignore` excludes the original Postman export, but ignoring a file does not sanitize it. Never commit real credentials.
+Before pushing or publishing this repository, review collection files for internal hostnames, identifiers, or company data. `.gitignore` excludes the original credential-bearing collection export, but ignoring a file does not sanitize it. Never commit real credentials.
 
 ## Documentation
 

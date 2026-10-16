@@ -37,7 +37,7 @@ Choose a request in the collection tree, review its method and URL, then click *
 - Before a run, Relay checks that referenced environment variables are set and request URLs are valid. Missing values and invalid URLs block execution; state-changing requests and requests without response checks require review. The check never displays environment values.
 - The run report shows each request's method, status, duration, response-body size, assertion results, and response-extraction outcomes. Choose JSON, Excel-compatible CSV, or standalone HTML when exporting. All formats omit response bodies, headers, and extracted values.
 
-The importer accepts only Relay's JSON collection format; Postman exports are not converted.
+The importer accepts only Relay's JSON collection format; other API-client exports are not converted.
 
 ## Request Configuration
 

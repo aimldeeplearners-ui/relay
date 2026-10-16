@@ -3,13 +3,13 @@
 > This document describes target product requirements, not a claim that every feature is implemented in the current Phase 2 prototype. See [FEATURES.md](FEATURES.md) for current capabilities and known limitations.
 
 ## 1. Executive Summary & Product Vision
-Build a professional-grade desktop application (built with **Electron, React, TypeScript, and Tailwind CSS**) inspired by Postman. The tool is dedicated exclusively to **REST** and **SOAP** APIs. It must support environment switching, a left-side collection workspace tree, full request configuration (params, headers, auth, multi-mode bodies), and an automated validation/assertion engine (JSON Schema for REST, XPath for SOAP) based on the custom **`RestSoapSpecEnterprise v2.0`** format.
+Build a professional-grade desktop application (built with **Electron, React, TypeScript, and Tailwind CSS**) dedicated exclusively to **REST** and **SOAP** APIs. It must support environment switching, a left-side collection workspace tree, full request configuration (params, headers, auth, multi-mode bodies), and an automated validation/assertion engine (JSON Schema for REST, XPath for SOAP) based on the custom **`RestSoapSpecEnterprise v2.0`** format.
 
 ## Current Implementation Snapshot (2026-10-16)
 
 The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath checks, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. Offset pagination is opt-in per request; the response-array JSON Pointer must match the API response. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
 
-Still planned or unsupported: request-history replay, raw Postman import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Postman JavaScript scripts and non-REST/SOAP protocols remain out of scope.
+Still planned or unsupported: request-history replay, third-party collection import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope.
 
 ---
 

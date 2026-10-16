@@ -59,7 +59,7 @@ Resolve and triage npm audit findings, produce an SBOM and license notices, add 
 
 ## Phase 2 Guardrails
 
-- Keep the product REST/SOAP-only; do not add GraphQL, gRPC, WebSocket, or Postman JavaScript sandbox support.
+- Keep the product REST/SOAP-only; do not add GraphQL, gRPC, WebSocket, or collection JavaScript sandbox support.
 - Continue using the Relay collection schema as the canonical import/export format.
 - Do not store real credentials in fixtures or reports.
 - Do not generate installer/portable executables as part of ordinary checks; package only when explicitly requested.
