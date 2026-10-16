@@ -51,6 +51,16 @@ npm run build
 
 `npm run build` builds the Electron main, preload, and renderer bundles; it does not create an installer.
 
+## Create a Windows Installer
+
+On Windows, from the project directory, run:
+
+```powershell
+npm run package:win
+```
+
+This builds the app and creates the NSIS installer under `release/`, named `Relay-Setup-<version>.exe` (the current package version is in `package.json`). To create a portable executable instead of an installer, use `npm run package:portable`.
+
 ## Data and Security
 
 Workspace data is stored locally. Credential values use Electron `safeStorage` when available; collection exports redact protected values by default. Treat exported commands and any export that includes secrets as sensitive.
