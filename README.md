@@ -1,0 +1,72 @@
+# Relay
+
+Relay is a Windows desktop application for building and testing REST and SOAP HTTP requests. It uses Electron, React, and TypeScript. Collections use Relay's `RestSoapSpecEnterprise v2.0` JSON format.
+
+## Features
+
+- Organize requests in collections and nested folders; switch between workspace environments.
+- Configure query parameters, headers, Bearer/Basic/API-key auth, OAuth2 password-grant auth, and JSON, XML, raw, URL-encoded, or text form-data bodies.
+- Validate responses with expected status codes, JSON Schema, or XPath assertions.
+- Run collections sequentially, extract JSON Pointer values for later requests, check run readiness, and configure bounded limit/offset pagination per request.
+- Copy the active request as a PowerShell-compatible cURL command after confirmation.
+- Export sanitized JSON, CSV, or HTML collection-run reports.
+
+Relay is a REST/SOAP testing client, not a raw Postman collection importer. It imports Relay-format JSON. Postman scripts, file uploads, cursor pagination, multiple workspaces, and request-history replay are not supported.
+
+## Requirements
+
+- Windows 10 or later.
+- Node.js and npm. Node.js 24 is the version used for development and verification.
+
+## Run Locally
+
+From the project directory, install dependencies and start the Electron app:
+
+```powershell
+npm ci
+npm run dev
+```
+
+If PowerShell cannot find `node` or `npm`, install Node.js or add its installation directory to `PATH`.
+
+## Test Against the Local API
+
+The included in-memory API runs on loopback and needs no credentials or external network access. In a second PowerShell terminal:
+
+```powershell
+npm run api:local
+```
+
+Import [the local CRUD collection](spec/local-api-crud-collection.json) into Relay and select the **Local API** environment. The collection checks list/get, creates an item, extracts its ID for follow-up requests, updates and deletes it, and confirms deletion. Data resets when the API server stops. See [LOCAL-API-SERVER.md](LOCAL-API-SERVER.md) for routes and options.
+
+## Checks
+
+From the project directory:
+
+```powershell
+npm test
+npm run typecheck
+npm run build
+```
+
+`npm run build` builds the Electron main, preload, and renderer bundles; it does not create an installer.
+
+## Data and Security
+
+Workspace data is stored locally. Credential values use Electron `safeStorage` when available; collection exports redact protected values by default. Treat exported commands and any export that includes secrets as sensitive.
+
+Before pushing or publishing this repository, review collection files for internal hostnames, identifiers, or company data. `.gitignore` excludes the original Postman export, but ignoring a file does not sanitize it. Never commit real credentials.
+
+## Documentation
+
+- [Feature guide](FEATURES.md)
+- [Architecture](ARCHITECTURE.md)
+- [Product specification](PRODUCT-SPEC.md)
+- [Phase 1 baseline](PHASE1.md)
+- [Phase 2 roadmap and verification](PHASE2.md)
+- [Local API server guide](LOCAL-API-SERVER.md)
+- [Third-party software and license inventory](THIRD-PARTY-SOFTWARE.md)
+
+## License
+
+No project license is currently specified. Confirm the intended repository visibility and distribution terms before public redistribution.
