@@ -1,0 +1,15 @@
+import { contextBridge, ipcRenderer } from 'electron';
+import type { ApiRequestInput, ApiResponse, CollectionDocument, CollectionExportResult, CollectionLoadResult, CollectionLocationResult, CollectionRunReport, CollectionSaveResult, CurlCopyResult, RelayApi, RunReportExportResult, RunReportFormat } from '../shared/api';
+
+const relayApi: RelayApi = {
+  executeRequest: (input: ApiRequestInput) => ipcRenderer.invoke('api:execute', input) as Promise<ApiResponse>,
+  importCollection: () => ipcRenderer.invoke('collection:import') as Promise<{ collection?: CollectionDocument; canceled?: boolean; error?: string }>,
+  loadCollection: () => ipcRenderer.invoke('collection:load') as Promise<CollectionLoadResult>,
+  saveCollection: (collection: CollectionDocument) => ipcRenderer.invoke('collection:save', collection) as Promise<CollectionSaveResult>,
+  chooseCollectionLocation: (collection: CollectionDocument) => ipcRenderer.invoke('collection:choose-location', collection) as Promise<CollectionLocationResult>,
+  exportCollection: (collection: CollectionDocument, includeSecrets = false) => ipcRenderer.invoke('collection:export', collection, includeSecrets) as Promise<CollectionExportResult>,
+  exportRunReport: (report: CollectionRunReport, format: RunReportFormat = 'json') => ipcRenderer.invoke('report:export', report, format) as Promise<RunReportExportResult>,
+  copyAsCurl: (input: ApiRequestInput) => ipcRenderer.invoke('request:copy-curl', input) as Promise<CurlCopyResult>,
+};
+
+contextBridge.exposeInMainWorld('relay', relayApi);

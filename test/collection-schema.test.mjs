@@ -1,0 +1,421 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import Ajv from 'ajv';
+import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
+import { partitionCollectionSecrets, redactCollectionSecrets, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
+import { buildCurlCommand } from '../src/shared/curlCommand.ts';
+import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared/responseExtraction.ts';
+import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../src/shared/oauth2PasswordGrant.ts';
+import { serializeRunReportCsv, serializeRunReportHtml } from '../src/shared/runReportFormats.ts';
+
+const schema = JSON.parse(readFileSync(new URL('../spec/rest-soap-spec.json', import.meta.url), 'utf8'));
+const validateCollection = new Ajv({ allErrors: true }).compile(schema);
+
+function readCollection(fileName) {
+  return JSON.parse(readFileSync(new URL(`../spec/${fileName}`, import.meta.url), 'utf8'));
+}
+
+function countRequests(items) {
+  return items.reduce((count, item) => count + (item.request ? 1 : 0) + (item.items ? countRequests(item.items) : 0), 0);
+}
+
+test('demo collections match the Relay schema and contain the documented requests', () => {
+  const fourRequestCollection = readCollection('demo-multi-request-collection.json');
+  const tenRequestCollection = readCollection('demo-ten-request-collection.json');
+  const localCrudCollection = readCollection('local-api-crud-collection.json');
+
+  assert.equal(validateCollection(fourRequestCollection), true, JSON.stringify(validateCollection.errors));
+  assert.equal(validateCollection(tenRequestCollection), true, JSON.stringify(validateCollection.errors));
+  assert.equal(validateCollection(localCrudCollection), true, JSON.stringify(validateCollection.errors));
+  assert.equal(countRequests(fourRequestCollection.items), 4);
+  assert.equal(countRequests(tenRequestCollection.items), 10);
+  assert.equal(countRequests(localCrudCollection.items), 9);
+});
+
+test('workspace schema accepts named collections and workspace-root folders', () => {
+  const workspace = {
+    info: { name: 'Relay workspace', version: '1.0.0' },
+    environments: [{ name: 'Demo', values: [{ key: 'baseUrl', value: 'https://example.test', enabled: true }] }],
+    items: [
+      {
+        name: 'Workspace folder',
+        type: 'folder',
+        items: [{ name: 'Health check', request: { method: 'GET', url: '{{baseUrl}}/health' } }],
+      },
+      {
+          name: 'Sample collection',
+          type: 'collection',
+          items: [{ name: 'Users', type: 'folder', items: [] }],
+      },
+    ],
+  };
+
+  assert.equal(validateCollection(workspace), true, JSON.stringify(validateCollection.errors));
+});
+
+test('schema rejects unsupported collection types and HTTP methods', () => {
+  const invalidType = {
+    info: { name: 'Bad type', version: '1.0.0' },
+    items: [{ name: 'Unknown', type: 'workspace-folder' }],
+  };
+  const invalidMethod = {
+    info: { name: 'Bad method', version: '1.0.0' },
+    items: [{ name: 'Request', request: { method: 'CONNECT', url: 'https://example.test' } }],
+  };
+
+  assert.equal(validateCollection(invalidType), false);
+  assert.equal(validateCollection(invalidMethod), false);
+});
+
+test('schema requires collection metadata and request URL/method', () => {
+  const missingVersion = { info: { name: 'No version' }, items: [] };
+  const missingRequestUrl = {
+    info: { name: 'No request URL', version: '1.0.0' },
+    items: [{ name: 'Request', request: { method: 'GET' } }],
+  };
+
+  assert.equal(validateCollection(missingVersion), false);
+  assert.equal(validateCollection(missingRequestUrl), false);
+});
+
+test('schema accepts JSON Schema and XPath response assertions', () => {
+  const collection = {
+    info: { name: 'Assertions', version: '1.0.0' },
+    items: [{ name: 'Validate response', request: {
+      method: 'GET',
+      url: 'https://example.test/data',
+      assertions: {
+        jsonSchema: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+        xpathMatches: [{ xpath: '//Status', expectedValue: 'OK' }, { xpath: '//Result' }],
+      },
+    } }],
+  };
+
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+});
+
+test('schema accepts the supported OAuth2 password grant configuration', () => {
+  const collection = {
+    info: { name: 'OAuth2', version: '1.0.0' },
+    items: [{ name: 'Authenticated request', request: {
+      method: 'GET',
+      url: 'https://api.example.test/items',
+      auth: { type: 'oauth2', oauth2: {
+        grantType: 'password', tokenUrl: 'https://idp.example.test/token', clientId: 'relay', clientSecret: '', username: 'user', password: '',
+      } },
+    } }],
+  };
+
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+});
+
+test('collection runner collects requests depth-first in tree order', () => {
+  const items = [
+    { name: 'First', request: { method: 'GET', url: 'https://example.test/first' } },
+    { name: 'Folder', items: [
+      { name: 'Second', request: { method: 'POST', url: 'https://example.test/second' } },
+      { name: 'Nested', items: [{ name: 'Third', request: { method: 'DELETE', url: 'https://example.test/third' } }] },
+    ] },
+  ];
+
+  assert.deepEqual(collectRunnableRequests(items).map((request) => request.name), ['First', 'Second', 'Third']);
+});
+
+test('collection runner passes successful responses and respects configured assertions', () => {
+  assert.equal(isRequestPassing(200, false, []), true);
+  assert.equal(isRequestPassing(404, false, []), false);
+  assert.equal(isRequestPassing(404, false, [{ label: 'Expected 404', passed: true }], 404), true);
+  assert.equal(isRequestPassing(404, false, [{ label: 'Schema valid', passed: true }]), false);
+  assert.equal(isRequestPassing(200, false, [{ label: 'Schema valid', passed: true }, { label: 'Expected field', passed: false }]), false);
+  assert.equal(isRequestPassing(200, true, []), false);
+});
+
+test('response extraction resolves nested, array, and escaped JSON Pointer paths', () => {
+  const response = JSON.stringify({
+    data: { created: { id: 42 } },
+    items: [{ token: 'run-token' }],
+    'a/b': { '~key': 'escaped' },
+  });
+  const result = extractResponseVariables(response, [
+    { name: 'createdId', jsonPointer: '/data/created/id' },
+    { name: 'firstToken', jsonPointer: '/items/0/token' },
+    { name: 'escapedValue', jsonPointer: '/a~1b/~0key' },
+  ]);
+
+  assert.deepEqual(result.variables, { createdId: '42', firstToken: 'run-token', escapedValue: 'escaped' });
+  assert.ok(result.outcomes.every((outcome) => outcome.passed));
+});
+
+test('response extraction reports missing pointers and invalid JSON without returning values', () => {
+  const missing = extractResponseVariables('{"data":{}}', [
+    { name: 'createdId', jsonPointer: '/data/id' },
+    { name: 'badPointer', jsonPointer: 'data/id' },
+  ]);
+  const invalidJson = extractResponseVariables('not json', [{ name: 'createdId', jsonPointer: '/id' }]);
+
+  assert.deepEqual(missing.variables, {});
+  assert.deepEqual(missing.outcomes.map((outcome) => outcome.passed), [false, false]);
+  assert.deepEqual(invalidJson.variables, {});
+  assert.equal(invalidJson.outcomes[0].passed, false);
+  assert.equal(extractResponseVariables('{"id":1}', [{ name: ' ', jsonPointer: '/id' }]).outcomes[0].passed, false);
+});
+
+test('OAuth2 password grant form is encoded and token responses are validated', () => {
+  const request = buildOAuth2PasswordGrantRequest({
+    grantType: 'password',
+    tokenUrl: 'https://{{IDP_ROUTE}}/realms/noa/token',
+    clientId: 'relay client',
+    clientSecret: 'client&secret',
+    username: 'test user',
+    password: 'p@ss word',
+    scope: 'profile email',
+  }, { IDP_ROUTE: 'idp.example.test' });
+
+  assert.equal(request.tokenUrl, 'https://idp.example.test/realms/noa/token');
+  assert.equal(request.body.get('grant_type'), 'password');
+  assert.equal(request.body.get('client_secret'), 'client&secret');
+  assert.equal(request.body.get('username'), 'test user');
+  assert.equal(request.body.get('password'), 'p@ss word');
+  assert.equal(request.body.get('scope'), 'profile email');
+  assert.equal(parseOAuth2PasswordGrantResponse(200, '{"access_token":"sample-token","token_type":"Bearer","expires_in":3600}').expiresInSeconds, 3600);
+  assert.throws(() => parseOAuth2PasswordGrantResponse(401, '{}'), /HTTP 401/);
+  assert.throws(() => parseOAuth2PasswordGrantResponse(200, 'not json'), /valid JSON/);
+  assert.throws(() => parseOAuth2PasswordGrantResponse(200, '{"token_type":"Bearer"}'), /missing access_token/);
+});
+
+test('credential protection separates marked, sensitive-key, and auth values from collection data', () => {
+  const collection = {
+    info: { name: 'Credentials', version: '1.0.0' },
+    environments: [{ name: 'Demo', values: [
+      { key: 'baseUrl', value: 'https://example.test' },
+      { key: 'bearerToken', value: 'environment-secret' },
+      { key: 'privateValue', value: 'explicit-secret', secret: true },
+    ] }],
+    items: [{ name: 'API', items: [
+      { name: 'Read', request: {
+        method: 'GET',
+        url: 'https://example.test',
+        headers: [{ key: 'X-Api-Key', value: 'header-secret' }],
+        auth: { type: 'basic', basic: { username: 'account-name', password: 'auth-secret' } },
+        body: { mode: 'json', secret: true, raw: '{"clientSecret":"body-secret"}' },
+      } },
+      { name: 'OAuth', request: {
+        method: 'GET',
+        url: 'https://example.test',
+        auth: { type: 'oauth2', oauth2: { grantType: 'password', tokenUrl: 'https://idp.example.test/token', clientId: 'relay', clientSecret: 'oauth-client-secret', username: 'oauth-user', password: 'oauth-password' } },
+      } },
+    ] }],
+  };
+
+  const parts = partitionCollectionSecrets(collection);
+  const serialized = JSON.stringify(parts.collection);
+  assert.equal(validateCollection(parts.collection), true, JSON.stringify(validateCollection.errors));
+  assert.equal(serialized.includes('environment-secret'), false);
+  assert.equal(serialized.includes('explicit-secret'), false);
+  assert.equal(serialized.includes('header-secret'), false);
+  assert.equal(serialized.includes('auth-secret'), false);
+  assert.equal(serialized.includes('account-name'), false);
+  assert.equal(serialized.includes('body-secret'), false);
+  assert.equal(serialized.includes('oauth-client-secret'), false);
+  assert.equal(serialized.includes('oauth-user'), false);
+  assert.equal(serialized.includes('oauth-password'), false);
+  assert.equal(serialized.includes('https://example.test'), true);
+  assert.equal(parts.collection.environments[0].values[1].secret, true);
+  assert.deepEqual(restoreCollectionSecrets(parts.collection, parts.secrets).environments[0].values.map(({ value }) => value), [
+    'https://example.test', 'environment-secret', 'explicit-secret',
+  ]);
+  assert.equal(collection.environments[0].values[1].value, 'environment-secret');
+
+  const redacted = redactCollectionSecrets(collection);
+  assert.equal(validateCollection(redacted), true, JSON.stringify(validateCollection.errors));
+  assert.equal(JSON.stringify(redacted).includes('environment-secret'), false);
+  assert.equal(JSON.stringify(redacted).includes('auth-secret'), false);
+  assert.equal(JSON.stringify(redacted).includes('body-secret'), false);
+  assert.equal(JSON.stringify(redacted).includes('oauth-client-secret'), false);
+  assert.equal(JSON.stringify(redacted).includes('oauth-user'), false);
+  assert.equal(JSON.stringify(redacted).includes('oauth-password'), false);
+  assert.equal(redacted.items[0].items[0].request.auth.basic.password, '');
+  assert.equal(restoreCollectionSecrets(parts.collection, parts.secrets).items[0].items[0].request.body.raw, '{"clientSecret":"body-secret"}');
+  const restoredOAuth = restoreCollectionSecrets(parts.collection, parts.secrets).items[0].items[1].request.auth.oauth2;
+  assert.deepEqual({ clientSecret: restoredOAuth.clientSecret, username: restoredOAuth.username, password: restoredOAuth.password }, {
+    clientSecret: 'oauth-client-secret', username: 'oauth-user', password: 'oauth-password',
+  });
+});
+
+
+test('run report CSV and HTML formats escape content and omit response payloads', () => {
+  const report = {
+    collectionName: 'RAN "smoke", suite',
+    environmentName: 'Local',
+    startedAt: '2026-10-16T10:00:00.000Z',
+    completedAt: '2026-10-16T10:00:01.000Z',
+    stoppedEarly: false,
+    results: [{
+      name: '=HYPERLINK("https://example.test") <item>',
+      method: 'GET',
+      status: 200,
+      statusText: 'OK',
+      durationMs: 12,
+      sizeBytes: 64,
+      passed: false,
+      error: false,
+      assertions: [{ label: 'Missing "name", <required>', passed: false }],
+      extractions: [],
+      body: 'sensitive response payload',
+      headers: { authorization: 'sensitive response header' },
+    }],
+  };
+
+  const csv = serializeRunReportCsv(report);
+  const html = serializeRunReportHtml(report);
+  assert.ok(csv.startsWith('\uFEFF'));
+  assert.ok(csv.includes('"RAN ""smoke"", suite"'));
+  assert.ok(csv.includes('"\'=HYPERLINK(""https://example.test"") <item>"'));
+  assert.equal(csv.includes('sensitive response payload'), false);
+  assert.equal(csv.includes('sensitive response header'), false);
+  assert.ok(html.includes('RAN &quot;smoke&quot;, suite'));
+  assert.ok(html.includes('=HYPERLINK(&quot;https://example.test&quot;) &lt;item&gt;'));
+  assert.ok(html.includes('Missing &quot;name&quot;, &lt;required&gt;'));
+  assert.equal(html.includes('<script'), false);
+  assert.equal(html.includes('sensitive response payload'), false);
+  assert.equal(html.includes('sensitive response header'), false);
+});
+
+test('cURL command includes interpolated URL, headers, Bearer auth, and a safely quoted JSON body', () => {
+  const command = buildCurlCommand({
+    request: {
+      method: 'POST',
+      url: '{{baseUrl}}/items',
+      queryParams: [{ key: 'search', value: 'relay tester', enabled: true }],
+      headers: [{ key: 'Accept', value: 'application/json', enabled: true }],
+      auth: { type: 'bearer', bearer: { token: '{{bearerToken}}' } },
+      body: { mode: 'json', raw: '{"name":"O\'Brien"}' },
+    },
+    environment: { baseUrl: 'https://api.example.test', bearerToken: 'test-token' },
+  });
+
+  assert.ok(command.startsWith('curl.exe '));
+  assert.ok(command.includes("--request 'POST'"));
+  assert.ok(command.includes("--url 'https://api.example.test/items?search=relay+tester'"));
+  assert.ok(command.includes("'Authorization: Bearer test-token'"));
+  assert.ok(command.includes("'Content-Type: application/json'"));
+  assert.ok(command.includes("--data-raw '{"));
+  assert.ok(command.includes("O''Brien"));
+  assert.throws(() => buildCurlCommand({
+    request: { method: 'GET', url: 'https://api.example.test', auth: { type: 'oauth2', oauth2: { grantType: 'password', tokenUrl: 'https://idp.example.test/token', clientId: 'id', clientSecret: 'secret', username: 'user', password: 'pass' } } },
+    environment: {},
+  }), /OAuth2 token is unavailable/);
+});
+
+test('run readiness blocks missing variables and reports each variable without exposing its value', () => {
+  const requests = [
+    { name: 'Read one', request: { method: 'GET', url: 'https://api.example.test/items', headers: [{ key: 'Authorization', value: 'Bearer {{token}}' }] } },
+    { name: 'Read two', request: { method: 'GET', url: 'https://api.example.test/items/{{itemId}}', headers: [{ key: 'Authorization', value: 'Bearer {{token}}' }] } },
+  ];
+
+  const readiness = inspectRunReadiness(requests, { token: '', itemId: '42' });
+
+  assert.deepEqual(readiness.blockers, [{
+    message: 'Environment variable "{{token}}" is missing or blank.',
+    requestNames: ['Read one', 'Read two'],
+  }]);
+  assert.deepEqual(readiness.warnings, [{
+    message: 'No response assertions or extractions are configured; HTTP status alone determines pass/fail.',
+    requestNames: ['Read one', 'Read two'],
+  }]);
+});
+
+test('run readiness blocks invalid URLs and ignores disabled key-value rows', () => {
+  const readiness = inspectRunReadiness([
+    { name: 'Invalid URL', request: { method: 'GET', url: 'not a valid URL', queryParams: [{ key: 'q', value: '{{unused}}', enabled: false }], assertions: { expectedStatusCode: 200 } } },
+  ], {});
+
+  assert.deepEqual(readiness.blockers, [{
+    message: 'Request URL is invalid after environment interpolation.',
+    requestNames: ['Invalid URL'],
+  }]);
+  assert.deepEqual(readiness.warnings, []);
+});
+
+test('run readiness warns before state-changing requests and accepts configured checks', () => {
+  const readiness = inspectRunReadiness([
+    { name: 'Create item', request: { method: 'POST', url: 'https://api.example.test/items', assertions: { expectedStatusCode: 201 } } },
+    { name: 'Delete item', request: { method: 'DELETE', url: 'https://api.example.test/items/42', assertions: { expectedStatusCode: 204 } } },
+  ], {});
+
+  assert.deepEqual(readiness.blockers, []);
+  assert.deepEqual(readiness.warnings, [{
+    message: 'POST, PUT, PATCH, or DELETE requests will be sent; review their effects on the target system.',
+    requestNames: ['Create item', 'Delete item'],
+  }]);
+});
+
+test('run readiness accepts variables extracted by an earlier request', () => {
+  const readiness = inspectRunReadiness([
+    { name: 'Get token', request: { method: 'POST', url: 'https://idp.example.test/token', extractVariables: [{ name: 'bearerToken', jsonPointer: '/access_token' }], assertions: { expectedStatusCode: 200 } } },
+    { name: 'Get data', request: { method: 'GET', url: 'https://api.example.test/data', auth: { type: 'bearer', bearer: { token: '{{bearerToken}}' } }, assertions: { expectedStatusCode: 200 } } },
+  ], { bearerToken: '' });
+
+  assert.deepEqual(readiness.blockers, []);
+  assert.deepEqual(readiness.warnings, [{
+    message: 'POST, PUT, PATCH, or DELETE requests will be sent; review their effects on the target system.',
+    requestNames: ['Get token'],
+  }]);
+});
+
+test('offset pagination updates limit and offset while preserving other query parameters', () => {
+  const request = {
+    method: 'GET',
+    url: 'https://api.example.test/items',
+    queryParams: [
+      { key: 'limit', value: '25', enabled: true },
+      { key: 'offset', value: '0', enabled: true },
+      { key: 'filter', value: 'active', enabled: true },
+    ],
+    pagination: { limitParam: 'limit', offsetParam: 'offset', pageSize: 25, startOffset: 10, maxPages: 4, itemsJsonPointer: '/items' },
+  };
+
+  const page = buildOffsetPaginationRequest(request, 2);
+
+  assert.deepEqual(page.queryParams, [
+    { key: 'limit', value: '25', enabled: true },
+    { key: 'offset', value: '60', enabled: true },
+    { key: 'filter', value: 'active', enabled: true },
+  ]);
+  assert.equal(request.queryParams[1].value, '0');
+});
+
+test('pagination reads array lengths from a JSON Pointer and rejects non-arrays', () => {
+  assert.equal(countJsonArrayAtPointer('[1,2]', ''), 2);
+  assert.equal(countJsonArrayAtPointer('{"data":{"items":[1,2,3]}}', '/data/items'), 3);
+  assert.equal(countJsonArrayAtPointer('{"data":{}}', '/data/items'), null);
+  assert.equal(countJsonArrayAtPointer('not json', '/items'), null);
+});
+
+test('schema accepts bounded offset pagination and readiness rejects invalid pagination settings', () => {
+  const collection = {
+    info: { name: 'Paginated collection', version: '1.0.0' },
+    items: [{ name: 'List items', request: {
+      method: 'GET',
+      url: 'https://api.example.test/items',
+      pagination: { limitParam: 'limit', offsetParam: 'offset', pageSize: 50, startOffset: 0, maxPages: 10, itemsJsonPointer: '/items' },
+    } }],
+  };
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+
+  const invalid = inspectRunReadiness([{
+    name: 'List items',
+    request: { ...collection.items[0].request, pagination: { ...collection.items[0].request.pagination, pageSize: 0 } },
+  }], {});
+  assert.equal(invalid.blockers.length, 1);
+  assert.match(invalid.blockers[0].message, /Offset pagination settings are invalid/);
+});
+
+test('offset pagination continues on full pages and reports possible truncation at the maximum', () => {
+  const pagination = { limitParam: 'limit', offsetParam: 'offset', pageSize: 20, startOffset: 0, maxPages: 3, itemsJsonPointer: '/items' };
+  assert.deepEqual(getOffsetPaginationProgress(20, pagination, 1), { hasMorePages: true, reachedPageLimit: false });
+  assert.deepEqual(getOffsetPaginationProgress(4, pagination, 2), { hasMorePages: false, reachedPageLimit: false });
+  assert.deepEqual(getOffsetPaginationProgress(20, pagination, 3), { hasMorePages: false, reachedPageLimit: true });
+  assert.deepEqual(getOffsetPaginationProgress(null, pagination, 1), { hasMorePages: false, reachedPageLimit: false });
+});

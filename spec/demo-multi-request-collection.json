@@ -1,0 +1,119 @@
+{
+  "info": {
+    "name": "Relay API Demo",
+    "description": "Several REST requests organized into folders.",
+    "version": "1.0.0"
+  },
+  "environments": [
+    {
+      "name": "Demo",
+      "values": [
+        {
+          "key": "baseUrl",
+          "value": "https://jsonplaceholder.typicode.com",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Posts",
+      "items": [
+        {
+          "name": "Get post 1",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/posts/1",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none"
+            },
+            "assertions": {
+              "expectedStatusCode": 200
+            }
+          }
+        },
+        {
+          "name": "List three posts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/posts",
+            "queryParams": [
+              {
+                "key": "_limit",
+                "value": "3",
+                "enabled": true
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none"
+            },
+            "assertions": {
+              "expectedStatusCode": 200
+            }
+          }
+        },
+        {
+          "name": "Create a post",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/posts",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"title\": \"hello from Relay\",\n  \"body\": \"A sample request\",\n  \"userId\": 1\n}"
+            },
+            "assertions": {
+              "expectedStatusCode": 201
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "items": [
+        {
+          "name": "Get comments for post 1",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/posts/1/comments",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none"
+            },
+            "assertions": {
+              "expectedStatusCode": 200
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

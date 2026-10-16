@@ -1,0 +1,133 @@
+{
+  "info": {
+    "name": "Relay Local CRUD API",
+    "version": "1.0.0",
+    "description": "Local in-memory REST API for testing Relay request execution and collection chaining."
+  },
+  "environments": [
+    {
+      "name": "Local API",
+      "values": [
+        { "key": "baseUrl", "value": "http://api.relay.localhost:3000", "enabled": true },
+        { "key": "seedItemId", "value": "1", "enabled": true }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Items CRUD",
+      "type": "collection",
+      "items": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "List items",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/items",
+            "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Get seeded item",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/items/{{seedItemId}}",
+            "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Create item",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/items",
+            "headers": [
+              { "key": "Accept", "value": "application/json", "enabled": true },
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "json", "raw": "{\n  \"name\": \"Created by Relay\",\n  \"description\": \"POST response ID feeds later requests in this run.\"\n}" },
+            "assertions": { "expectedStatusCode": 201 },
+            "extractVariables": [{ "name": "createdItemId", "jsonPointer": "/id" }]
+          }
+        },
+        {
+          "name": "Get created item",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/items/{{createdItemId}}",
+            "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Replace created item",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/items/{{createdItemId}}",
+            "headers": [
+              { "key": "Accept", "value": "application/json", "enabled": true },
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "json", "raw": "{\n  \"name\": \"Replaced by Relay\",\n  \"description\": \"Updated with PUT.\"\n}" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Patch created item",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/items/{{createdItemId}}",
+            "headers": [
+              { "key": "Accept", "value": "application/json", "enabled": true },
+              { "key": "Content-Type", "value": "application/json", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "json", "raw": "{\n  \"description\": \"Patched by Relay.\"\n}" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Delete created item",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/items/{{createdItemId}}",
+            "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Confirm deleted item is gone",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/items/{{createdItemId}}",
+            "headers": [{ "key": "Accept", "value": "application/json", "enabled": true }],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 404 }
+          }
+        }
+      ]
+    }
+  ]
+}

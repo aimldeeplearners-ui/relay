@@ -1,0 +1,542 @@
+{
+  "info": {
+    "name": "Relay workspace",
+    "version": "1.0.0",
+    "description": "Converted from a Postman collection. Credential values were removed. Fill the marked secret environment variables before testing. State-changing requests are separated for manual runs."
+  },
+  "environments": [
+    {
+      "name": "HPE RAN",
+      "values": [
+        {
+          "key": "baseUrl",
+          "value": "/",
+          "enabled": true
+        },
+        {
+          "key": "IDP_ROUTE",
+          "value": "idp-platform-idp.apps.apollo.rishiocp.cloud4lab.local",
+          "enabled": true
+        },
+        {
+          "key": "SD_API_ROUTE",
+          "value": "sd-api-rana-ui.apps.apollo.rishiocp.cloud4lab.local",
+          "enabled": true
+        },
+        {
+          "key": "SERIAL_NUMBER",
+          "value": "MXQ2080HC7",
+          "enabled": true
+        },
+        {
+          "key": "REGION",
+          "value": "Bengaluru",
+          "enabled": true
+        },
+        {
+          "key": "SITE",
+          "value": "IWF01",
+          "enabled": true
+        },
+        {
+          "key": "domain",
+          "value": "apps.apollo.rishiocp.cloud4lab.local",
+          "enabled": true
+        },
+        {
+          "key": "REGION2",
+          "value": "Chennai",
+          "enabled": true
+        },
+        {
+          "key": "XNFCHARTNAME",
+          "value": "cnf-simple2",
+          "enabled": true
+        },
+        {
+          "key": "username",
+          "value": "",
+          "enabled": true,
+          "secret": true
+        },
+        {
+          "key": "password",
+          "value": "",
+          "enabled": true,
+          "secret": true
+        },
+        {
+          "key": "client_id",
+          "value": "rana-portal",
+          "enabled": true
+        },
+        {
+          "key": "client_secret",
+          "value": "",
+          "enabled": true,
+          "secret": true
+        },
+        {
+          "key": "bearerToken",
+          "value": "",
+          "enabled": true,
+          "secret": true
+        },
+        {
+          "key": "postmanPath_2_subscriptionId",
+          "value": "e9b7b29d-2f6a-4bb9-9b2b-25b92ded9b66",
+          "enabled": true,
+          "description": "(Required) Subcription Identifier."
+        },
+        {
+          "key": "postmanPath_6_context",
+          "value": "mediation-bridge-context-int",
+          "enabled": true,
+          "description": "(Required) Context of the alarm. Used to identified alarm group type. Currently only mediation-bridge-context-int is used and identifies a single group for all infrastructure alarms including hardware, OS and K8S Alarms."
+        },
+        {
+          "key": "postmanPath_7_context",
+          "value": "mediation-bridge-context-int",
+          "enabled": true,
+          "description": "(Required) Context of the alarm. Used to identified alarm group type. Currently only mediation-bridge-context-int is used and identifies a single group for all infrastructure alarms including hardware, OS and K8S Alarms."
+        },
+        {
+          "key": "postmanPath_7_id",
+          "value": "c6c06c9d-9b65-2d82-7365-9515329373eb",
+          "enabled": true,
+          "description": "(Required) Identifier of the alarm (UUID)"
+        },
+        {
+          "key": "postmanPath_3_subscriptionId",
+          "value": "e9b7b29d-2f6a-4bb9-9b2b-25b92ded9b66",
+          "enabled": true,
+          "description": "(Required) Subcription Identifier."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "HPE Telco RAN Automation API Golf Copy 2",
+      "type": "collection",
+      "description": "### Overview\n\nHPE Telco RAN Automation provides a comprehensive, pre-integrated, and cloud-native solution for multi-vendor management and automation in disaggregated, open radio access networks. It enables zero-touch provisioning and full lifecycle management of RAN edge infrastructure. That includes vDU and vCU orchestration and configuration, along with RF deployment automation and configuration, and built-in assurance for all layers of the disaggregated RAN.\n\nHPE Telco RAN Automation APIs are:\n\n- Conform to the OpenAPI specification.\n    \n- Use a single endpoint.\n    \n- Use a single OAuth token to access all APIs and provide RBAC features.\n    \n- Are built to be secure and highly available.\n    \n- Are RESTful for flexible implementation.\n    \n\n### Authentication\n\nAn access token to include in the headers of your API requests. Please refer to the Integration Guide to know how to generate a valid OAuth Token (JWT) using the Identity Provider of the solution.  \nThe token will contains information regarding roles to apply RBAC (operator role, admin role, etc.)\n\n### API Synchronous vs Asynchronous\n\nAPI responses can be synchronous or asynchronous depending on the nature of the request.\n\n- **Synchronous** means the operation is executed when the call is received and the result of the operation is returned with the API response. It is easily to check if the operation succeed or failed checking the returned result value.\n    \n- **Asynchronous** means the operation is started, the request return a status of the call execution (**acknowledged** or **rejected**), but the operation itself will take time and its status is asynchronous. It can be check on demand using the Job Management API to track stages / steps of the execution until the completion.\n    \n\n### Pagination and Sorting\n\nSome APIs responses are paginated. The **limit** and **offset** parameters are used to navigate through the pages.  \nOffset parameter specifies the start index and the limit is the number of results to be returned (i.e. page size). Default values are provided in each API call.\n\n**Example**:  \nAn API call with 35 results will need 2 API calls using a limit of 20 as follows.\n\n- First API call with limit=20&offset=0: First page with 20 results (results from 0 to 19)\n    \n- Second API call with limit=20&offset=20: Second page with 15 results (results from 20 to 34).\n    \n\nThe **orderBy** and **order** parameters are used to sort the results selecting the sorting criteria and the sorting direction (ascending / descending).\n\n**Example**:  \nAn API call with order by name with an ascending sorting.\n\n- limit=20&offset=0&orderBy=name&order=ASC: First page with 20 results sorted by name in ascending order.\n    \n\n### API Versioning Basics\n\nHPE Telco RAN Automation APIs are versioned. The API version is specified in the URL of the API call and can change version independently.\n\n#### URL: /rana/version/resource\n\nwhere:\n\n- **Alpha** : The version names contain alpha (for example v1alpha1, v1alpha2). No guarantees on backward compatibility.\n    \n- **Beta** : The version names contain beta (for example v2beta3, v2beta4). Experimental implementation. Breaking changes will be minimized but possible during the stable implementation and testing.\n    \n- **Stable** : The version name is **vX** where X is an integer of the MAJOR version(for example v1, v2). Dependable, production-worthy. APIs are versioned, with automated version conversion for backward compatibility.\n    \n\n### Deprecation and Sunsetting\n\nWhen a beta or stable Major version is incremented, both the new and old versions of the API are supported concurrently for a period of time.\n\nDeprecated APIs are indicated using the **deprecated: true** field in the OpenAPI specification\n\n### Length of Parameters\n\nCommon data type used in query or body parameters have the following maximal length.\n\n- **string** : Maximal length is **128 chars**.\n    \n- **url string** : Maximal length is **2048 chars** for strings used for URL reference.\n    \n\n### Geographic Coordinates\n\nDecimal degrees is a notation for expressing latitude and longitude geographic coordinates ([Wikipedia - Decimal degrees](https://en.wikipedia.org/wiki/Decimal_degrees)). Up to 8 digits are supported to provide a precision of 1 mm.\n\n- Latitude : **90.000000000** to **\\-90.000000000**\n    \n- Longitude : **180.000000000** to **\\-180.000000000**\n    \n\n### Rate Limiting HTTP Headers\n\nRate limiting is a method of controlling traffic flow to a API by restricting the number of requests that can be made within a certain time frame (seconds, minutes, hours, days, months, or years).\n\nIf the limit is exceeded, the client receives an **HTTP error 429 API rate limit exceeded**\n\nWhen the Rate Limiting is enabled, the following HTTP headers are added to the response:\n\n- **RateLimit-Limit**: The maximum number of requests that the consumer is permitted to make in the time window.\n    \n    - **RateLimit-Remaining**: The number of requests remaining in the current rate limit window.\n        \n    - **RateLimit-Reset**: The remaining window before the rate limit resets in seconds.\n        \n    - **X-RateLimit-Limit-Second**: The maximum number of requests that the consumer is permitted to make in the current second.\n        \n    - **X-RateLimit-Remaining-Second**: The number of requests remaining in the current second.\n        \n    - **X-RateLimit-Limit-Hour**: The maximum number of requests that the consumer is permitted to make in the current hour.\n        \n    - **X-RateLimit-Remaining-Hour**: The number of requests remaining in the current hour.\n        \n    - **X-RateLimit-Limit-Day**: The maximum number of requests that the consumer is permitted to make in the current day.\n        \n    - **X-RateLimit-Remaining-Day**: The number of requests remaining in the current day.\n        \n    - **X-RateLimit-Limit-Month**: The maximum number of requests that the consumer is permitted to make in the current month.\n        \n    - **X-RateLimit-Remaining-Month**: The number of requests remaining in the current month.\n        \n    - **X-RateLimit-Limit-Year**: The maximum number of requests that the consumer is permitted to make in the current year.\n        \n    - **X-RateLimit-Remaining-Year**: The number of requests remaining in the current year.\n        \n\nPlease refer to the [Internet draft RateLimiting Header Fields for HTTP](https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-08.html).\n\n### Request Size Limiting\n\nRequest size limiting is a method of controlling the size of the request payload (bytes, kilobytes, or megabytes) that can be sent to the API.\n\nIf the request size is exceeded, the client receives an **HTTP error 417 or 413 Request size limit exceeded**\n\n### Invalid or non-existent endpoints\n\nIf your request receives an HTTP error **404 Not found.** _This endpoint doesn't exist, please refer to the documentation to see valid endpoints_. It means the service you are requesting does not exist or the URL is incomplete. You need to review the API documentation and align with the expected syntax to get a valid endpoint.\n\nIf your request receives an HTTP Error **405 Method Not Allowed.** _This method is not allowed, please refer to documentation to see allowed methods_. It means you are using a HTTP verb that is not associated to the URL you are requesting. Please check in the API documentation the expected HTTP verb for the service (i.e. GET, POST, PUT and DELETE).\n\nContact Support:  \nName: HPE Telco RAN Automation",
+      "items": [
+        {
+          "name": "access_token",
+          "type": "folder",
+          "items": [
+            {
+              "name": "Get Access Token",
+              "request": {
+                "method": "POST",
+                "url": "https://{{IDP_ROUTE}}/realms/noa/protocol/openid-connect/token",
+                "headers": [
+                  {
+                    "key": "Origin",
+                    "value": "http://localhost:3000",
+                    "enabled": true
+                  }
+                ],
+                "auth": {
+                  "type": "none"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "password",
+                      "enabled": true
+                    },
+                    {
+                      "key": "client_id",
+                      "value": "rana-portal",
+                      "enabled": true
+                    },
+                    {
+                      "key": "client_secret",
+                      "value": "{{client_secret}}",
+                      "enabled": true,
+                      "secret": true
+                    },
+                    {
+                      "key": "username",
+                      "value": "{{username}}",
+                      "enabled": true,
+                      "secret": true
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{password}}",
+                      "enabled": true,
+                      "secret": true
+                    },
+                    {
+                      "key": "",
+                      "value": "https://cp-rana-infra.apps.ocp4rana.c4lab.local",
+                      "enabled": false
+                    }
+                  ]
+                },
+                "extractVariables": [
+                  {
+                    "name": "bearerToken",
+                    "jsonPointer": "/access_token"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "rana/v2",
+          "type": "folder",
+          "items": [
+            {
+              "name": "subscriptions",
+              "type": "folder",
+              "items": [
+                {
+                  "name": "{subscriptionId}",
+                  "type": "folder",
+                  "items": [
+                    {
+                      "name": "Get Subscription by ID",
+                      "request": {
+                        "method": "GET",
+                        "url": "https://subscription-api-rana-ui.{{domain}}/rana/v2/subscriptions/{{postmanPath_2_subscriptionId}}",
+                        "headers": [
+                          {
+                            "key": "Accept",
+                            "value": "application/json",
+                            "enabled": true
+                          }
+                        ],
+                        "auth": {
+                          "type": "bearer",
+                          "bearer": {
+                            "token": "{{bearerToken}}"
+                          }
+                        },
+                        "assertions": {
+                          "expectedStatusCode": 200
+                        }
+                      },
+                      "description": "Get detailed information about subscription for a given subscription identifier (_Synchronous_).\nThis operation requires a role:\n - **rana-assurance-alarm-operator** to get alarm subscription\n - **rana-assurance-metric-operator** to get metric subscription\n - **rana-assurance-provisioning-operator** to get provisioning subscription.\n"
+                    }
+                  ]
+                },
+                {
+                  "name": "Get Subscriptions",
+                  "request": {
+                    "method": "GET",
+                    "url": "https://subscription-api-rana-ui.{{domain}}/rana/v2/subscriptions",
+                    "headers": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "enabled": true
+                      }
+                    ],
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": {
+                        "token": "{{bearerToken}}"
+                      }
+                    },
+                    "queryParams": [
+                      {
+                        "key": "subscriptionId",
+                        "value": "e9b7b29d-2f6a-4bb9-9b2b-25b92ded9b66",
+                        "enabled": true,
+                        "description": "Subcription identifier."
+                      },
+                      {
+                        "key": "subscriptionType",
+                        "value": "Alarm",
+                        "enabled": true,
+                        "description": "Subcription Type."
+                      },
+                      {
+                        "key": "user",
+                        "value": "myApplication",
+                        "enabled": true,
+                        "description": "Name of the user who created the subscription."
+                      },
+                      {
+                        "key": "limit",
+                        "value": "20",
+                        "enabled": true,
+                        "description": "Maximal number of results for the call (default: 200. Minimum: 1, Maximum: 2000)."
+                      },
+                      {
+                        "key": "offset",
+                        "value": "10",
+                        "enabled": true,
+                        "description": "Offset in result (default: 0). It will work with limit parameter"
+                      },
+                      {
+                        "key": "orderBy",
+                        "value": "subscriptionType",
+                        "enabled": true,
+                        "description": "Ordering property. Can be \"subscriptionId\", \"subscriptionType\", \"user\". Requires order parameter."
+                      },
+                      {
+                        "key": "order",
+                        "value": "DESC",
+                        "enabled": true,
+                        "description": "Ordering direction. Can be ASC or DESC. Requires orderBy parameter."
+                      }
+                    ],
+                    "assertions": {
+                      "expectedStatusCode": 200
+                    }
+                  },
+                  "description": "Get the list of subscription in RANA (_Synchronous_).\nThis operation requires a role:\n - **rana-assurance-alarm-operator** to get alarm subscriptions\n - **rana-assurance-metric-operator** to get metric subscriptions\n - **rana-assurance-provisioning-operator** to get provisioning subscriptions.\n"
+                }
+              ]
+            },
+            {
+              "name": "alarms/{context}",
+              "type": "folder",
+              "items": [
+                {
+                  "name": "Get Alarms",
+                  "request": {
+                    "method": "POST",
+                    "url": "https://alarm-api-rana-ui.{{domain}}/rana/v2/alarms/{{postmanPath_6_context}}",
+                    "headers": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "enabled": true
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "enabled": true
+                      }
+                    ],
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": {
+                        "token": "{{bearerToken}}"
+                      }
+                    },
+                    "queryParams": [
+                      {
+                        "key": "call_id",
+                        "value": "103638d09b652d82",
+                        "enabled": true,
+                        "description": "Call identifier. If populated, it means the response is not complete and there are more alarms to be retrieved. This call_id can be reused in a next query to retrieve the next set of alarms. This is how the pagination can be performed to limit the response."
+                      }
+                    ],
+                    "body": {
+                      "mode": "json",
+                      "raw": "{\n  \"what\": [\n    \"managed_object\",\n    \"region_location\"\n  ],\n  \"filter\": [\n    {\n      \"name\": \"region_location\",\n      \"operator\": \"=\",\n      \"value\": \"myRegion\"\n    }\n  ]\n}"
+                    },
+                    "assertions": {
+                      "expectedStatusCode": 200
+                    }
+                  },
+                  "description": "Get the list of alarms (_Synchronous_). This operation requires a role **rana-assurance-alarm-operator** or **rana-assurance-alarm-manager**  to get alarms."
+                },
+                {
+                  "name": "Get Alarm by ID",
+                  "request": {
+                    "method": "GET",
+                    "url": "https://alarm-api-rana-ui.{{domain}}/rana/v2/alarms/{{postmanPath_7_context}}/{{postmanPath_7_id}}",
+                    "headers": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "enabled": true
+                      }
+                    ],
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": {
+                        "token": "{{bearerToken}}"
+                      }
+                    },
+                    "assertions": {
+                      "expectedStatusCode": 200
+                    }
+                  },
+                  "description": "Get detailed information about alarm for a given context and alarm identifier (_Synchronous_). This operation requires a role **rana-assurance-alarm-operator** or **rana-assurance-alarm-manager** to get alarms."
+                }
+              ]
+            },
+            {
+              "name": "Get firmwares",
+              "request": {
+                "method": "GET",
+                "url": "https://storage-api-rana-ui.{{domain}}/rana/v2/firmwares",
+                "headers": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "auth": {
+                  "type": "bearer",
+                  "bearer": {
+                    "token": "{{bearerToken}}"
+                  }
+                },
+                "queryParams": [
+                  {
+                    "key": "vendor",
+                    "value": "HPE",
+                    "enabled": true,
+                    "description": "(Required) Vendor of the device (HPE, DELL, ...)."
+                  },
+                  {
+                    "key": "generation",
+                    "value": "G11",
+                    "enabled": true,
+                    "description": "Generation version of the device HPE (G10 or G11). Mandatory if vendor is HPE else optional."
+                  }
+                ],
+                "assertions": {
+                  "expectedStatusCode": 200
+                }
+              },
+              "description": "Get a detailed information about all firmwares for NON COM Device from S3 storage (images/firmwares/spp) (_Synchronous_)."
+            },
+            {
+              "name": "Get Metrics",
+              "request": {
+                "method": "POST",
+                "url": "https://metric-api-rana-ui.{{domain}}/rana/v2/metrics",
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "enabled": true
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "auth": {
+                  "type": "bearer",
+                  "bearer": {
+                    "token": "{{bearerToken}}"
+                  }
+                },
+                "queryParams": [
+                  {
+                    "key": "limit",
+                    "value": "20",
+                    "enabled": true,
+                    "description": "Maximal number of results for the call (default: 200. Minimum: 1, Maximum: 2000)."
+                  },
+                  {
+                    "key": "offset",
+                    "value": "10",
+                    "enabled": true,
+                    "description": "Offset in result (default: 0). It will work with limit parameter"
+                  }
+                ],
+                "body": {
+                  "mode": "json",
+                  "raw": "{\n  \"what\": [\n    \"ts\",\n    \"metricGroup\",\n    \"metricName\",\n    \"metricValue\"\n  ],\n  \"filter\": [\n    {\n      \"name\": \"region\",\n      \"operator\": \"=\",\n      \"value\": \"myRegion\"\n    }\n  ]\n}"
+                },
+                "assertions": {
+                  "expectedStatusCode": 200
+                }
+              },
+              "description": "Get the list of metrics (_Synchronous_). This operation requires a role **rana-assurance-metric-operator** to get metrics."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "State-changing requests (manual)",
+      "type": "collection",
+      "description": "Creates or deletes subscriptions. Select and run individual requests only after reviewing the target environment.",
+      "items": [
+        {
+          "name": "rana/v2",
+          "type": "folder",
+          "items": [
+            {
+              "name": "subscriptions",
+              "type": "folder",
+              "items": [
+                {
+                  "name": "{subscriptionId}",
+                  "type": "folder",
+                  "items": [
+                    {
+                      "name": "Delete Subscription",
+                      "request": {
+                        "method": "DELETE",
+                        "url": "https://subscription-api-rana-ui.{{domain}}/rana/v2/subscriptions/{{postmanPath_3_subscriptionId}}",
+                        "headers": [
+                          {
+                            "key": "Accept",
+                            "value": "application/json",
+                            "enabled": true
+                          }
+                        ],
+                        "auth": {
+                          "type": "bearer",
+                          "bearer": {
+                            "token": "{{bearerToken}}"
+                          }
+                        },
+                        "assertions": {
+                          "expectedStatusCode": 200
+                        }
+                      },
+                      "description": "Delete a subscription for a given subscription identifier (_Synchronous_).\nThis operation requires a role:\n - **rana-assurance-alarm-operator** to unsubscribe to alarms\n - **rana-assurance-metric-operator** to unsubscribe to metrics\n - **rana-assurance-provisioning-operator** to unsubscribe to provisioning notifications.\n"
+                    }
+                  ]
+                },
+                {
+                  "name": "Create Subscription",
+                  "request": {
+                    "method": "POST",
+                    "url": "https://subscription-api-rana-ui.{{domain}}/rana/v2/subscriptions",
+                    "headers": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "enabled": true
+                      },
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "enabled": true
+                      }
+                    ],
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": {
+                        "token": "{{bearerToken}}"
+                      }
+                    },
+                    "body": {
+                      "mode": "json",
+                      "raw": "{\n  \"callbackUri\": \"https://example-notification-receiver.com/notifications/alarms\",\n  \"subscriptionType\": \"Alarm\",\n  \"scope\": {\n    \"regions\": [\n      \"MyRegion\"\n    ],\n    \"sites\": [\n      \"MySite\"\n    ],\n    \"devices\": [\n      \"SGH403HTXR\"\n    ]\n  },\n  \"filter\": {\n    \"perceivedSeverity\": [\n      \"Critical\"\n    ],\n    \"alarmType\": [\n      \"EquipmentAlarm\"\n    ],\n    \"context\": [\n      \"mediation-bridge-context-int\"\n    ]\n  }\n}"
+                    },
+                    "assertions": {
+                      "expectedStatusCode": 201
+                    }
+                  },
+                  "description": "Create a subscription (_Synchronous_) to receive alarm, metrics or provisioning events via notifications, for the managed objects/entities defined in the filter constraint specified in this operation. Notifications will be sent to the callback URI provided.\nThis operation requires a role:\n - **rana-assurance-alarm-operator** to subscribe to alarms\n - **rana-assurance-metric-operator** to subscribe to metrics\n - **rana-assurance-provisioning-operator** to subscribe to provisioning notifications.\n"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

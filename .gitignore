@@ -1,0 +1,8 @@
+node_modules/
+out/
+release/
+.env
+.env.*
+!.env.example
+*.log
+/HPE Telco RAN Automation API Apollo-2.postman_collection.json

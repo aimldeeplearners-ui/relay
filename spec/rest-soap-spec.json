@@ -1,0 +1,168 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RestSoapSpecEnterprise",
+  "type": "object",
+  "properties": {
+    "info": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "version": { "type": "string" }
+      },
+      "required": ["name", "version"]
+    },
+    "environments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": { "type": "string" },
+                "value": { "type": "string" },
+                "enabled": { "type": "boolean" }
+              },
+              "required": ["key", "value"]
+            }
+          }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/CollectionItem" }
+    }
+  },
+  "required": ["info", "items"],
+  "definitions": {
+    "CollectionItem": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["collection", "folder"] },
+        "description": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CollectionItem" }
+        },
+        "request": { "$ref": "#/definitions/Request" }
+      },
+      "required": ["name"]
+    },
+    "Request": {
+      "type": "object",
+      "properties": {
+        "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
+        "url": { "type": "string" },
+        "queryParams": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/KeyValue" }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "limitParam": { "type": "string", "minLength": 1 },
+            "offsetParam": { "type": "string", "minLength": 1 },
+            "pageSize": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "startOffset": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
+            "maxPages": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "itemsJsonPointer": { "type": "string" }
+          },
+          "required": ["limitParam", "offsetParam", "pageSize", "startOffset", "maxPages", "itemsJsonPointer"],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/KeyValue" }
+        },
+        "extractVariables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "jsonPointer": { "type": "string" }
+            },
+            "required": ["name", "jsonPointer"]
+          }
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["none", "bearer", "basic", "apikey", "oauth2"] },
+            "bearer": {
+              "type": "object",
+              "properties": { "token": { "type": "string" } }
+            },
+            "basic": {
+              "type": "object",
+              "properties": { "username": { "type": "string" }, "password": { "type": "string" } }
+            },
+            "apikey": {
+              "type": "object",
+              "properties": { "key": { "type": "string" }, "value": { "type": "string" }, "in": { "type": "string", "enum": ["header", "query"] } }
+            },
+            "oauth2": {
+              "type": "object",
+              "properties": {
+                "grantType": { "type": "string", "enum": ["password"] },
+                "tokenUrl": { "type": "string" },
+                "clientId": { "type": "string" },
+                "clientSecret": { "type": "string" },
+                "username": { "type": "string" },
+                "password": { "type": "string" },
+                "scope": { "type": "string" }
+              },
+              "required": ["grantType", "tokenUrl", "clientId", "clientSecret", "username", "password"]
+            }
+          }
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "mode": { "type": "string", "enum": ["json", "xml", "raw", "urlencoded", "formdata", "none"] },
+            "secret": { "type": "boolean" },
+            "raw": { "type": "string" },
+            "urlencoded": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } },
+            "formdata": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } }
+          }
+        },
+        "assertions": {
+          "type": "object",
+          "properties": {
+            "expectedStatusCode": { "type": "integer" },
+            "jsonSchema": { "type": "object" },
+            "xpathMatches": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "xpath": { "type": "string" },
+                  "expectedValue": { "type": "string" }
+                },
+                "required": ["xpath"]
+              }
+            }
+          }
+        }
+      },
+      "required": ["method", "url"]
+    },
+    "KeyValue": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "secret": { "type": "boolean" },
+        "description": { "type": "string" }
+      },
+      "required": ["key", "value"]
+    }
+  }
+}

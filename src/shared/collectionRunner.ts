@@ -1,0 +1,215 @@
+import type { AssertionResult, CollectionItem, KeyValue, RequestDefinition } from './api';
+export type { CollectionRunReport, CollectionRunResult } from './api';
+
+export interface CollectionRunTarget {
+  name: string;
+  path: string;
+  request: RequestDefinition;
+}
+
+export interface RunReadinessIssue {
+  message: string;
+  requestNames: string[];
+}
+
+export interface RunReadinessReport {
+  blockers: RunReadinessIssue[];
+  warnings: RunReadinessIssue[];
+}
+
+export function buildOffsetPaginationRequest(request: RequestDefinition, pageIndex: number): RequestDefinition {
+  const pagination = request.pagination;
+  if (!pagination) return request;
+
+  let queryParams = [...(request.queryParams ?? [])];
+  const setParameter = (key: string, value: string): void => {
+    let found = false;
+    queryParams = queryParams.map((entry) => {
+      if (entry.key !== key) return entry;
+      if (found) return { ...entry, enabled: false };
+      found = true;
+      return { ...entry, value, enabled: true };
+    });
+    if (!found) queryParams.push({ key, value, enabled: true });
+  };
+
+  setParameter(pagination.limitParam, String(pagination.pageSize));
+  setParameter(pagination.offsetParam, String(pagination.startOffset + pageIndex * pagination.pageSize));
+  return { ...request, queryParams };
+}
+
+export function getOffsetPaginationProgress(
+  itemCount: number | null,
+  pagination: NonNullable<RequestDefinition['pagination']>,
+  completedPage: number,
+): { hasMorePages: boolean; reachedPageLimit: boolean } {
+  const fullPage = itemCount !== null && itemCount >= pagination.pageSize;
+  return {
+    hasMorePages: fullPage && completedPage < pagination.maxPages,
+    reachedPageLimit: fullPage && completedPage >= pagination.maxPages,
+  };
+}
+
+const variablePattern = /\{\{\s*([^{}]+?)\s*\}\}/g;
+
+function collectVariables(value: unknown, variables: Set<string>): void {
+  if (typeof value === 'string') {
+    for (const match of value.matchAll(variablePattern)) variables.add(match[1].trim());
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectVariables(item, variables);
+  } else if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) collectVariables(item, variables);
+  }
+}
+
+function collectEnabledEntryVariables(entries: KeyValue[] | undefined, variables: Set<string>): void {
+  for (const entry of entries ?? []) {
+    if (entry.enabled === false || !entry.key.trim()) continue;
+    collectVariables(entry.key, variables);
+    collectVariables(entry.value, variables);
+  }
+}
+
+function requestVariables(request: RequestDefinition): Set<string> {
+  const variables = new Set<string>();
+  collectVariables(request.url, variables);
+  collectEnabledEntryVariables(request.queryParams, variables);
+  collectEnabledEntryVariables(request.headers, variables);
+
+  const auth = request.auth;
+  if (auth?.type === 'bearer') collectVariables(auth.bearer, variables);
+  else if (auth?.type === 'basic') collectVariables(auth.basic, variables);
+  else if (auth?.type === 'apikey') collectVariables(auth.apikey, variables);
+  else if (auth?.type === 'oauth2') collectVariables(auth.oauth2, variables);
+
+  const body = request.body;
+  if (body?.mode === 'urlencoded') collectEnabledEntryVariables(body.urlencoded, variables);
+  else if (body?.mode === 'formdata') collectEnabledEntryVariables(body.formdata, variables);
+  else if (body && body.mode !== 'none') collectVariables(body.raw, variables);
+  return variables;
+}
+
+function interpolate(value: string, environment: Record<string, string>): string {
+  return value.replace(variablePattern, (placeholder, name: string) =>
+    Object.hasOwn(environment, name.trim()) ? environment[name.trim()] : placeholder,
+  );
+}
+
+export function inspectRunReadiness(
+  requests: CollectionRunTarget[],
+  environment: Record<string, string>,
+): RunReadinessReport {
+  const missingVariables = new Map<string, Set<string>>();
+  const invalidUrls: string[] = [];
+  const runtimeDependentUrls: string[] = [];
+  const writeMethodRequests: string[] = [];
+  const requestsWithoutChecks: string[] = [];
+  const invalidPagination: string[] = [];
+  const runVariables = new Set<string>();
+
+  for (const { name, request } of requests) {
+    const pagination = request.pagination;
+    if (pagination && (
+      !pagination.limitParam.trim()
+      || !pagination.offsetParam.trim()
+      || pagination.limitParam === pagination.offsetParam
+      || !Number.isInteger(pagination.pageSize)
+      || pagination.pageSize < 1
+      || pagination.pageSize > 1000
+      || !Number.isInteger(pagination.startOffset)
+      || pagination.startOffset < 0
+      || pagination.startOffset > 1_000_000_000
+      || !Number.isInteger(pagination.maxPages)
+      || pagination.maxPages < 1
+      || pagination.maxPages > 100
+      || (pagination.itemsJsonPointer !== '' && (!pagination.itemsJsonPointer.startsWith('/') || /~(?![01])/.test(pagination.itemsJsonPointer)))
+    )) invalidPagination.push(name);
+
+    for (const variable of requestVariables(request)) {
+      if (runVariables.has(variable)) continue;
+      if (Object.hasOwn(environment, variable) && environment[variable].trim()) continue;
+      const names = missingVariables.get(variable) ?? new Set<string>();
+      names.add(name);
+      missingVariables.set(variable, names);
+    }
+
+    const urlVariables = new Set<string>();
+    collectVariables(request.url, urlVariables);
+    const hasMissingUrlVariable = [...urlVariables].some((variable) =>
+      !runVariables.has(variable) && (!Object.hasOwn(environment, variable) || !environment[variable].trim()),
+    );
+    if (!hasMissingUrlVariable) {
+      if ([...urlVariables].some((variable) => runVariables.has(variable))) {
+        runtimeDependentUrls.push(name);
+      } else {
+        try {
+          new URL(interpolate(request.url, environment));
+        } catch {
+          invalidUrls.push(name);
+        }
+      }
+    }
+
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) writeMethodRequests.push(name);
+    const assertions = request.assertions;
+    const hasResponseChecks = assertions?.expectedStatusCode !== undefined
+      || Boolean(assertions?.jsonSchema)
+      || Boolean(assertions?.xpathMatches?.length)
+      || Boolean(request.extractVariables?.length);
+    if (!hasResponseChecks) requestsWithoutChecks.push(name);
+    for (const extraction of request.extractVariables ?? []) {
+      if (extraction.name.trim()) runVariables.add(extraction.name);
+    }
+  }
+
+  const blockers: RunReadinessIssue[] = [...missingVariables].map(([variable, names]) => ({
+    message: `Environment variable "{{${variable}}}" is missing or blank.`,
+    requestNames: [...names],
+  }));
+  for (const name of invalidUrls) {
+    blockers.push({ message: 'Request URL is invalid after environment interpolation.', requestNames: [name] });
+  }
+  if (invalidPagination.length) {
+    blockers.push({ message: 'Offset pagination settings are invalid; check parameter names, limits, and the JSON Pointer.', requestNames: invalidPagination });
+  }
+
+  const warnings: RunReadinessIssue[] = [];
+  for (const name of runtimeDependentUrls) {
+    warnings.push({
+      message: 'URL includes a value extracted during the run; its final form cannot be checked before the preceding response.',
+      requestNames: [name],
+    });
+  }
+  if (writeMethodRequests.length) {
+    warnings.push({
+      message: 'POST, PUT, PATCH, or DELETE requests will be sent; review their effects on the target system.',
+      requestNames: writeMethodRequests,
+    });
+  }
+  if (requestsWithoutChecks.length) {
+    warnings.push({
+      message: 'No response assertions or extractions are configured; HTTP status alone determines pass/fail.',
+      requestNames: requestsWithoutChecks,
+    });
+  }
+
+  return { blockers, warnings };
+}
+
+export function collectRunnableRequests(items: CollectionItem[], parentPath = ''): CollectionRunTarget[] {
+  const requests: CollectionRunTarget[] = [];
+  for (const [index, item] of items.entries()) {
+    const path = parentPath ? `${parentPath}.${index}` : `${index}`;
+    if (item.request) requests.push({ name: item.name, path, request: item.request });
+    if (item.items) requests.push(...collectRunnableRequests(item.items, path));
+  }
+  return requests;
+}
+
+export function isRequestPassing(status: number, error: boolean, assertions: AssertionResult[], expectedStatusCode?: number): boolean {
+  if (error) return false;
+  if (expectedStatusCode === undefined && (status < 200 || status >= 400)) return false;
+  if (assertions.length) return assertions.every((assertion) => assertion.passed);
+  return status >= 200 && status < 400;
+}
+

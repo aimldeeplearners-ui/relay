@@ -1,0 +1,38 @@
+@import "./styles-refresh.css";
+
+:root {
+  --green: #087bb8;
+  --green-dark: #056293;
+  --green-wash: #e1f1f8;
+  --blue: #087bb8;
+  --sidebar: #36566a;
+  --sidebar-raised: #41677d;
+  --sidebar-line: #5e7d8e;
+  --sidebar-muted: #c0d2db;
+}
+
+.select-wrap { color: #80d4f1; }
+.sidebar .icon-button:hover { color: #8cddf6; }
+.workspace-root.active-container, .collection-group-row.active-container, .folder-select-row.active-container { background: #126e9e; }
+.tree-toggle:hover { color: #8cddf6; }
+.request-entry.selected { background: #416b81; }
+.request-entry.selected .request-row { color: #d0f1ff; }
+.method-mini.get, .history-method.get { color: #55c9f2; }
+.select-wrap:focus-within { outline-color: #e17a58; }
+
+.request-tab-strip { background: #e6eff3; border-bottom-color: #c8dbe4; }
+.request-tab-item { border-color: #c4d5dc; border-bottom-color: #b9cbd2; background: #dce8ed; }
+.request-tab-item.active { border-color: #b9d2dd; border-bottom-color: #fbfcfa; }
+.request-tab-item.active .request-tab-select .method-mini.get { background: #d8eff8; }
+.runner-button { background: #e1f1f8; border-color: #bdd9e6; color: #086a9e; }
+.runner-button:hover { background: #d1eaf5; }
+.method-get { color: #087bb8; }
+.tab-count { background: #e5f0f4; color: #527282; }
+.tab.active, .response-tab.active { color: #056293; }
+.tab.active::after, .response-tab.active::after { background: #087bb8; }
+.secret-reveal:hover { background: #e1f1f8; color: #056293; }
+.auth-note code { color: #086a9e; }
+.mode.active { background: #e1f1f8; color: #056293; }
+.assertion-icon { background: #e1f1f8; color: #087bb8; }
+.response-section { border-top-color: #087bb8; }
+.placeholder-art { color: #087bb8; }

@@ -1,0 +1,218 @@
+{
+  "info": {
+    "name": "Relay Ten Request Demo",
+    "description": "Ten REST requests for testing Relay collections, environments, headers, parameters, request bodies, and response assertions. Demo targets JSONPlaceholder; Local requires a compatible API server on localhost:3000.",
+    "version": "1.0.0"
+  },
+  "environments": [
+    {
+      "name": "Demo",
+      "values": [
+        { "key": "baseUrl", "value": "https://jsonplaceholder.typicode.com", "enabled": true },
+        { "key": "userId", "value": "1", "enabled": true },
+        { "key": "postId", "value": "1", "enabled": true },
+        { "key": "albumId", "value": "1", "enabled": true },
+        { "key": "acceptHeader", "value": "application/json", "enabled": true },
+        { "key": "jsonContentType", "value": "application/json", "enabled": true },
+        { "key": "clientName", "value": "Relay demo collection", "enabled": true }
+      ]
+    },
+    {
+      "name": "Local",
+      "values": [
+        { "key": "baseUrl", "value": "http://localhost:3000", "enabled": true },
+        { "key": "userId", "value": "1", "enabled": true },
+        { "key": "postId", "value": "1", "enabled": true },
+        { "key": "albumId", "value": "1", "enabled": true },
+        { "key": "acceptHeader", "value": "application/json", "enabled": true },
+        { "key": "jsonContentType", "value": "application/json", "enabled": true },
+        { "key": "clientName", "value": "Relay local test", "enabled": true }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Posts",
+      "items": [
+        {
+          "name": "List posts for a user",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/posts",
+            "queryParams": [
+              { "key": "userId", "value": "{{userId}}", "enabled": true },
+              { "key": "_limit", "value": "5", "enabled": true }
+            ],
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true },
+              { "key": "X-Relay-Client", "value": "{{clientName}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Get one post",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/posts/{{postId}}",
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": {
+              "expectedStatusCode": 200,
+              "jsonSchema": {
+                "type": "object",
+                "properties": {
+                  "userId": { "type": "integer" },
+                  "id": { "type": "integer" },
+                  "title": { "type": "string" },
+                  "body": { "type": "string" }
+                },
+                "required": ["userId", "id", "title", "body"]
+              }
+            }
+          }
+        },
+        {
+          "name": "Create a post",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/posts",
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true },
+              { "key": "Content-Type", "value": "{{jsonContentType}}", "enabled": true },
+              { "key": "X-Relay-Client", "value": "{{clientName}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"title\": \"Relay demo post\",\n  \"body\": \"Created by the ten-request sample collection\",\n  \"userId\": {{userId}}\n}"
+            },
+            "assertions": { "expectedStatusCode": 201 }
+          }
+        },
+        {
+          "name": "Replace a post",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/posts/{{postId}}",
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true },
+              { "key": "Content-Type", "value": "{{jsonContentType}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"id\": {{postId}},\n  \"title\": \"Replaced by Relay\",\n  \"body\": \"PUT request example\",\n  \"userId\": {{userId}}\n}"
+            },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Update a post title",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/posts/{{postId}}",
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true },
+              { "key": "Content-Type", "value": "{{jsonContentType}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"title\": \"Patched by Relay\"\n}"
+            },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Delete a post",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/posts/{{postId}}",
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "items": [
+        {
+          "name": "List comments for a post",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/posts/{{postId}}/comments",
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "Find comments by post ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/comments",
+            "queryParams": [
+              { "key": "postId", "value": "{{postId}}", "enabled": true },
+              { "key": "_limit", "value": "5", "enabled": true }
+            ],
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Albums and photos",
+      "items": [
+        {
+          "name": "Get one album",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/albums/{{albumId}}",
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        },
+        {
+          "name": "List photos in an album",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/albums/{{albumId}}/photos",
+            "queryParams": [
+              { "key": "_limit", "value": "5", "enabled": true }
+            ],
+            "headers": [
+              { "key": "Accept", "value": "{{acceptHeader}}", "enabled": true },
+              { "key": "X-Relay-Client", "value": "{{clientName}}", "enabled": true }
+            ],
+            "auth": { "type": "none" },
+            "body": { "mode": "none" },
+            "assertions": { "expectedStatusCode": 200 }
+          }
+        }
+      ]
+    }
+  ]
+}
