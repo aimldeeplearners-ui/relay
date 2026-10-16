@@ -26,11 +26,11 @@ body { background: var(--canvas); color: var(--ink); }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline-color: #e17a58; }
 
 .app-shell { grid-template-columns: var(--sidebar-width, 248px) 7px minmax(0, 1fr); background: var(--canvas); }
-.sidebar { grid-column: 1; grid-row: 2; min-width: 0; height: calc(100vh - 54px); min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #8496b5 transparent; scrollbar-width: thin; }
+.sidebar { grid-column: 1; grid-row: 2; min-width: 0; height: auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #8496b5 transparent; scrollbar-width: thin; }
 .sidebar-resize-handle { position: relative; z-index: 3; grid-column: 2; grid-row: 2; width: 7px; cursor: col-resize; touch-action: none; outline: none; }
 .sidebar-resize-handle::after { position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; content: ""; transition: background .14s ease; }
 .sidebar-resize-handle:hover::after, .sidebar-resize-handle:focus-visible::after, .sidebar-resize-handle:active::after { background: var(--orange); }
-.main-content { grid-column: 3; grid-row: 2; }
+.main-content { grid-column: 3; grid-row: 2; min-height: 0; }
 .topbar { background: linear-gradient(100deg, #eaf2fc 0%, #f0eefb 100%); border-color: #d4dff0; }
 .brand-mark { background: var(--green); border-radius: 6px; }
 .brand-name, h1, h2, .request-name-input, .environment-dialog-heading h2 { font-family: Bahnschrift, Candara, sans-serif; letter-spacing: 0 !important; }
