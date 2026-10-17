@@ -18,6 +18,8 @@ Relay imports its own JSON collection format only. Scripted collections, file up
 - Windows 10 or later.
 - Node.js and npm. Node.js 24 is the version used for development and verification.
 
+Dependencies are declared in `package.json` and pinned in `package-lock.json`. `node_modules` is intentionally excluded from Git; on each computer, `npm ci` downloads the locked dependencies from the npm registry and recreates that folder. Internet or access to a configured npm registry is required.
+
 ## Run Locally
 
 From the project directory, install dependencies and start the Electron app:

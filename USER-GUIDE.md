@@ -11,7 +11,27 @@ npm ci
 npm run dev
 ```
 
+The project commits `package.json` and `package-lock.json`, not `node_modules`. `npm ci` uses those files to download and install the required library versions on this computer; it requires internet or access to a configured npm registry.
+
 The default workspace contains demo requests. The Demo environment calls a public example service and requires internet access. Use test data only; do not send secrets or confidential payloads to public demo services.
+
+## Build a Windows Installer or Portable App
+
+On Windows, from the project folder after installing dependencies, choose one of these commands:
+
+```powershell
+npm run package:win
+```
+
+This builds the app and creates an NSIS installer in `release/`, named `Relay-Setup-<version>.exe`.
+
+For a portable executable that does not use the installer flow, run:
+
+```powershell
+npm run package:portable
+```
+
+This creates `Relay-Portable-<version>.exe` in `release/`. Both commands package the Windows application; `npm run build` alone only creates the Electron bundles and does not create either executable.
 
 ## 2. Run the Local CRUD Example
 
@@ -34,7 +54,17 @@ The API listens only on your computer at `http://api.relay.localhost:3000`. Its 
 
 ## 3. Set Up a Request
 
-Select a request in the tree. Its method and configuration appear in the request builder.
+### Create a collection and request
+
+To start from scratch:
+
+1. In the sidebar beside **COLLECTIONS**, click **New collection** (the layers icon), enter a name, and click **Create**.
+2. Select the new collection in the tree. Click **New request** (the file-plus icon) and Relay adds a request named **New request** with method `GET`.
+3. Select the request in the tree. Its method and configuration appear in the request builder.
+
+If you already imported a collection, select one of its requests instead.
+
+### Configure and send it
 
 1. Choose an HTTP method and enter the URL. Use an environment placeholder such as `{{baseUrl}}/api/items`; Relay displays the resolved URL below the field.
 2. In **Params**, add query parameters. In **Headers**, add request headers. Disable a row to omit it without deleting it.
@@ -46,7 +76,7 @@ For SOAP, enter the XML envelope in the XML or raw body editor and add a `SOAPAc
 
 ## 4. Configure Environments and Secrets
 
-The selected environment applies across the workspace. Use the environment selector to switch environments and the sliders button beside it to add or edit one. Add key/value pairs such as `baseUrl`; reference them in URLs, query parameters, headers, body fields, and auth values with `{{key}}` syntax.
+The selected environment applies across the workspace. Use the environment selector to switch environments. Click **Manage environments** (the sliders button beside the selector) to add an environment, rename it, or add/edit/remove variables. To add a variable, choose the environment, click **Add variable**, then enter its key and value. Mark a sensitive row **Secret** before entering a credential. Reference variables in URLs, query parameters, headers, body fields, and auth values with `{{key}}` syntax, for example `{{baseUrl}}/api/items`.
 
 Mark sensitive environment, parameter, header, or structured-body values **Secret**. Auth values are protected automatically. For credentials inside a JSON/XML/raw body, enable **Protect at rest**. Relay uses Electron `safeStorage` when the operating system provides it. Encryption is local to the OS account; it is not a shared secrets vault.
 
@@ -83,11 +113,11 @@ Click **Copy as cURL** in the request builder. Relay asks for confirmation befor
 
 ## 9. Save, Import, and Export
 
-Relay autosaves the workspace locally. Use the hard-drive button beside **COLLECTIONS** to choose a JSON autosave file; the top-bar save indicator shows status, and hovering over it shows the path. This is separate from export.
+Relay autosaves the workspace locally after changes. Use the hard-drive button beside **COLLECTIONS** to choose a JSON autosave file; the top-bar save indicator shows status, and hovering over it shows the path. This is separate from export.
 
-Use **Import Relay collection JSON** to append a Relay-format collection or workspace. Existing content is preserved; name conflicts are handled by adding a suffix. Other collection formats are not converted.
+To import, click **Import Relay collection JSON** (the download-arrow button beside **COLLECTIONS**) and choose a Relay-format JSON file. At the workspace root, it adds a collection; with a collection/folder selected, it adds the imported items under that location. Existing content is preserved; name conflicts are handled by adding a suffix. Other collection formats are not converted.
 
-Select **Relay workspace**, a collection, or a folder and use the export button to save a separate JSON copy of that scope. Protected values are redacted by default. Including plaintext secrets requires confirmation; only do so for a trusted destination.
+To export, select **Relay workspace**, a collection, or a folder, then click the export button beside **COLLECTIONS** (the folder-arrow button). Relay opens a Save dialog for a separate JSON copy of that scope; this does not change the autosave location. Protected values are redacted by default. Including plaintext secrets requires confirmation; only do so for a trusted destination.
 
 ## Troubleshooting
 
