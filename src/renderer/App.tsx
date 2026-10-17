@@ -7,7 +7,7 @@ import {
   Trash2, X,
 } from 'lucide-react';
 import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, HttpMethod, KeyValue, OffsetPaginationConfig, RequestDefinition, RunReportFormat } from '../shared/api';
-import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
+import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
 import { isSensitiveCredentialKey } from '../shared/credentialProtection';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../shared/responseExtraction';
 
@@ -839,6 +839,7 @@ function App(): JSX.Element {
     setCollectionError('');
     setCollectionSaveAllowed(true);
     const importedWorkspace = toWorkspaceCollection(result.collection);
+    importedWorkspace.items = inferOffsetPaginationOnImport(importedWorkspace.items);
     const isWorkspaceExport = result.collection.info.name === 'Relay workspace';
     const mergedEnvironments = mergeEnvironments(collection.environments, importedWorkspace.environments);
     const insertedPaths: string[] = [];

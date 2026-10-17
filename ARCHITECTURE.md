@@ -89,6 +89,7 @@ The native file dialog accepts Relay JSON only. The main process parses and vali
 - With a collection or folder selected, importing adds a nested folder under that container.
 - If the imported file is a full Relay workspace, its top-level items are inserted at root or grouped inside a nested imported folder.
 - Existing collections and requests are preserved. Conflicting names are suffixed. Environment name conflicts with different values are retained as separate suffixed environments.
+- Imported requests with exactly one enabled numeric `limit` and `offset` query parameter infer offset-pagination settings unless an explicit configuration already exists. The response-array JSON Pointer remains unset because its value is API-specific.
 
 Third-party API-client exports are not converted or imported. Collection scripts are not executed.
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import Ajv from 'ajv';
-import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
+import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
 import { partitionCollectionSecrets, redactCollectionSecrets, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
 import { buildCurlCommand } from '../src/shared/curlCommand.ts';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared/responseExtraction.ts';
@@ -384,6 +384,64 @@ test('offset pagination updates limit and offset while preserving other query pa
     { key: 'filter', value: 'active', enabled: true },
   ]);
   assert.equal(request.queryParams[1].value, '0');
+});
+
+test('import infers pagination from numeric limit and offset parameters recursively', () => {
+  const importedItems = [{
+    name: 'Collection',
+    type: 'collection',
+    items: [{
+      name: 'List records',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/records',
+        queryParams: [
+          { key: 'Limit', value: '40', enabled: true },
+          { key: 'offset', value: '80', enabled: true },
+          { key: 'status', value: 'active', enabled: true },
+        ],
+      },
+    }],
+  }];
+
+  const inferred = inferOffsetPaginationOnImport(importedItems);
+
+  assert.deepEqual(inferred[0].items[0].request.pagination, {
+    limitParam: 'Limit',
+    offsetParam: 'offset',
+    pageSize: 40,
+    startOffset: 80,
+    maxPages: 10,
+    itemsJsonPointer: '',
+  });
+  assert.equal(inferred[0].items[0].request.queryParams[2].value, 'active');
+});
+
+test('import preserves explicit pagination and skips disabled, ambiguous, or nonnumeric pairs', () => {
+  const explicit = { name: 'Explicit', request: {
+    method: 'GET', url: 'https://api.example.test/explicit',
+    pagination: { limitParam: 'count', offsetParam: 'skip', pageSize: 5, startOffset: 0, maxPages: 2, itemsJsonPointer: '/items' },
+    queryParams: [{ key: 'limit', value: '10' }, { key: 'offset', value: '0' }],
+  } };
+  const disabled = { name: 'Disabled', request: {
+    method: 'GET', url: 'https://api.example.test/disabled',
+    queryParams: [{ key: 'limit', value: '10', enabled: false }, { key: 'offset', value: '0' }],
+  } };
+  const ambiguous = { name: 'Ambiguous', request: {
+    method: 'GET', url: 'https://api.example.test/ambiguous',
+    queryParams: [{ key: 'limit', value: '10' }, { key: 'limit', value: '20' }, { key: 'offset', value: '0' }],
+  } };
+  const templated = { name: 'Templated', request: {
+    method: 'GET', url: 'https://api.example.test/templated',
+    queryParams: [{ key: 'limit', value: '{{pageSize}}' }, { key: 'offset', value: '0' }],
+  } };
+
+  const inferred = inferOffsetPaginationOnImport([explicit, disabled, ambiguous, templated]);
+
+  assert.equal(inferred[0], explicit);
+  assert.equal(inferred[1].request.pagination, undefined);
+  assert.equal(inferred[2].request.pagination, undefined);
+  assert.equal(inferred[3].request.pagination, undefined);
 });
 
 test('pagination reads array lengths from a JSON Pointer and rejects non-arrays', () => {

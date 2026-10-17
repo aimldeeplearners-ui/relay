@@ -7,7 +7,7 @@ Relay is a Windows desktop application for building and testing REST and SOAP HT
 - Organize requests in collections and nested folders; switch between workspace environments.
 - Configure query parameters, headers, Bearer/Basic/API-key auth, OAuth2 password-grant auth, and JSON, XML, raw, URL-encoded, or text form-data bodies.
 - Validate responses with expected status codes, JSON Schema, or XPath assertions.
-- Run collections sequentially, extract JSON Pointer values for later requests, check run readiness, and configure bounded limit/offset pagination per request.
+- Run collections sequentially, extract JSON Pointer values for later requests, check run readiness, and use bounded limit/offset pagination. Imports infer pagination when a request has one enabled numeric `limit`/`offset` pair; the response-array JSON Pointer remains API-specific.
 - Copy the active request as a PowerShell-compatible cURL command after confirmation.
 - Export sanitized JSON, CSV, or HTML collection-run reports.
 
@@ -69,6 +69,7 @@ Before pushing or publishing this repository, review collection files for intern
 
 ## Documentation
 
+- [User guide](USER-GUIDE.md)
 - [Feature guide](FEATURES.md)
 - [Architecture](ARCHITECTURE.md)
 - [Product specification](PRODUCT-SPEC.md)

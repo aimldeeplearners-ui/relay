@@ -7,7 +7,7 @@ Build a professional-grade desktop application (built with **Electron, React, Ty
 
 ## Current Implementation Snapshot (2026-10-16)
 
-The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath checks, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. Offset pagination is opt-in per request; the response-array JSON Pointer must match the API response. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
+The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath checks, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. On import, a request with one enabled numeric `limit` and `offset` query parameter pair receives inferred offset-pagination settings; the response-array JSON Pointer remains API-specific. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
 
 Still planned or unsupported: request-history replay, third-party collection import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope.
 
@@ -214,7 +214,7 @@ All collection files imported, exported, and stored by the application must stri
 * **URL Bar:** HTTP Method Selector (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`), URL input with live environment variable interpolation, and a prominent **Send** button.
 * **Copy as cURL:** Generate a PowerShell-compatible `curl.exe` command for the active request. Require confirmation before copying it because it can contain credentials or request data.
 * **Request Configuration Tabs:**
-  * **Params:** Key-value table for URL query parameters that auto-sync and append to the URL query string. Optional offset pagination configures limit/offset names, page size, start offset, maximum pages, and a JSON Pointer to the response array.
+  * **Params:** Key-value table for URL query parameters that auto-sync and append to the URL query string. Offset pagination can be inferred on import from one enabled numeric limit/offset pair or configured manually; page size, start offset, maximum pages, and response-array JSON Pointer are editable.
   * **Headers:** Key-value table for request headers (with quick-select options for `Content-Type`, `Accept`, `Authorization`).
   * **Auth:** Support for `No Auth`, `Bearer Token`, `Basic Auth`, `API Key`, and the legacy OAuth2 password grant.
   * **Body:** Mode toggle (`none`, `json`, `xml`, `raw`, `urlencoded`, `formdata`) with a built-in code editor for payloads.

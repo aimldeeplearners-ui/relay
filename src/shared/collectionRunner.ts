@@ -38,6 +38,51 @@ export function buildOffsetPaginationRequest(request: RequestDefinition, pageInd
   return { ...request, queryParams };
 }
 
+export function inferOffsetPaginationOnImport(items: CollectionItem[]): CollectionItem[] {
+  return items.map((item) => {
+    const children = item.items ? inferOffsetPaginationOnImport(item.items) : item.items;
+    const request = item.request;
+    if (!request || request.pagination) {
+      return children === item.items ? item : { ...item, items: children };
+    }
+
+    const enabledParams = (request.queryParams ?? []).filter((entry) => entry.enabled !== false && entry.key.trim());
+    const limits = enabledParams.filter((entry) => entry.key.trim().toLowerCase() === 'limit');
+    const offsets = enabledParams.filter((entry) => entry.key.trim().toLowerCase() === 'offset');
+    if (limits.length !== 1 || offsets.length !== 1 || limits[0].key.trim().toLowerCase() === offsets[0].key.trim().toLowerCase()) {
+      return children === item.items ? item : { ...item, items: children };
+    }
+
+    const pageSizeText = limits[0].value.trim();
+    const startOffsetText = offsets[0].value.trim();
+    if (!/^\d+$/.test(pageSizeText) || !/^\d+$/.test(startOffsetText)) {
+      return children === item.items ? item : { ...item, items: children };
+    }
+    const pageSize = Number(pageSizeText);
+    const startOffset = Number(startOffsetText);
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 1000
+      || !Number.isSafeInteger(startOffset) || startOffset > 1_000_000_000) {
+      return children === item.items ? item : { ...item, items: children };
+    }
+
+    return {
+      ...item,
+      items: children,
+      request: {
+        ...request,
+        pagination: {
+          limitParam: limits[0].key.trim(),
+          offsetParam: offsets[0].key.trim(),
+          pageSize,
+          startOffset,
+          maxPages: 10,
+          itemsJsonPointer: '',
+        },
+      },
+    };
+  });
+}
+
 export function getOffsetPaginationProgress(
   itemCount: number | null,
   pagination: NonNullable<RequestDefinition['pagination']>,
