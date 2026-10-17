@@ -150,9 +150,15 @@ export function inspectRunReadiness(
   const writeMethodRequests: string[] = [];
   const requestsWithoutChecks: string[] = [];
   const invalidPagination: string[] = [];
+  const invalidResponseTimeLimits: string[] = [];
   const runVariables = new Set<string>();
 
   for (const { name, request } of requests) {
+    const maxResponseTimeMs = request.assertions?.maxResponseTimeMs;
+    if (maxResponseTimeMs !== undefined && (!Number.isInteger(maxResponseTimeMs) || maxResponseTimeMs < 1 || maxResponseTimeMs > 30_000)) {
+      invalidResponseTimeLimits.push(name);
+    }
+
     const pagination = request.pagination;
     if (pagination && (
       !pagination.limitParam.trim()
@@ -198,8 +204,11 @@ export function inspectRunReadiness(
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) writeMethodRequests.push(name);
     const assertions = request.assertions;
     const hasResponseChecks = assertions?.expectedStatusCode !== undefined
+      || assertions?.maxResponseTimeMs !== undefined
       || Boolean(assertions?.jsonSchema)
       || Boolean(assertions?.xpathMatches?.length)
+      || Boolean(assertions?.jsonPointerAssertions?.length)
+      || Boolean(assertions?.responseHeaderAssertions?.length)
       || Boolean(request.extractVariables?.length);
     if (!hasResponseChecks) requestsWithoutChecks.push(name);
     for (const extraction of request.extractVariables ?? []) {
@@ -216,6 +225,9 @@ export function inspectRunReadiness(
   }
   if (invalidPagination.length) {
     blockers.push({ message: 'Offset pagination settings are invalid; check parameter names, limits, and the JSON Pointer.', requestNames: invalidPagination });
+  }
+  if (invalidResponseTimeLimits.length) {
+    blockers.push({ message: 'Maximum response time must be an integer between 1 and 30,000 milliseconds.', requestNames: invalidResponseTimeLimits });
   }
 
   const warnings: RunReadinessIssue[] = [];

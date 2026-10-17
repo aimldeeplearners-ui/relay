@@ -19,7 +19,7 @@ function decodePointerToken(token: string): string | undefined {
   return token.replace(/~1/g, '/').replace(/~0/g, '~');
 }
 
-function resolveJsonPointer(document: unknown, pointer: string): { found: boolean; value?: unknown } {
+export function resolveJsonPointerValue(document: unknown, pointer: string): { found: boolean; value?: unknown } {
   if (pointer === '') return { found: true, value: document };
   if (!pointer.startsWith('/')) return { found: false };
 
@@ -50,7 +50,7 @@ export function countJsonArrayAtPointer(body: string, pointer: string): number |
     return null;
   }
 
-  const result = resolveJsonPointer(document, pointer);
+  const result = resolveJsonPointerValue(document, pointer);
   return result.found && Array.isArray(result.value) ? result.value.length : null;
 }
 
@@ -76,7 +76,7 @@ export function extractResponseVariables(body: string, rules: ResponseExtraction
   const variables: Record<string, string> = {};
   const outcomes = rules.map(({ name, jsonPointer }) => {
     if (!name.trim()) return { name, jsonPointer, passed: false };
-    const result = resolveJsonPointer(document, jsonPointer);
+    const result = resolveJsonPointerValue(document, jsonPointer);
     if (!result.found) return { name, jsonPointer, passed: false };
     variables[name] = toRunVariable(result.value);
     return { name, jsonPointer, passed: true };

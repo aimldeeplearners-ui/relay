@@ -6,6 +6,7 @@ import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginat
 import { partitionCollectionSecrets, redactCollectionSecrets, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
 import { buildCurlCommand } from '../src/shared/curlCommand.ts';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared/responseExtraction.ts';
+import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../src/shared/responseAssertions.ts';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../src/shared/oauth2PasswordGrant.ts';
 import { serializeRunReportCsv, serializeRunReportHtml } from '../src/shared/runReportFormats.ts';
 
@@ -86,13 +87,76 @@ test('schema accepts JSON Schema and XPath response assertions', () => {
       method: 'GET',
       url: 'https://example.test/data',
       assertions: {
+        maxResponseTimeMs: 1000,
         jsonSchema: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
         xpathMatches: [{ xpath: '//Status', expectedValue: 'OK' }, { xpath: '//Result' }],
+        jsonPointerAssertions: [{ jsonPointer: '/id', operator: 'equals', expectedValue: '42' }],
+        responseHeaderAssertions: [{ name: 'Content-Type', operator: 'equals', expectedValue: 'application/json' }],
       },
     } }],
   };
 
   assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+});
+
+test('JSON Pointer assertions check presence and exact scalar values without exposing response values', () => {
+  const results = evaluateJsonPointerAssertions(JSON.stringify({ data: { name: 'Relay', active: true }, items: [] }), [
+    { jsonPointer: '/data/name', operator: 'equals', expectedValue: 'Relay' },
+    { jsonPointer: '/data/active', operator: 'equals', expectedValue: 'true' },
+    { jsonPointer: '/items', operator: 'exists' },
+    { jsonPointer: '/missing', operator: 'exists' },
+    { jsonPointer: '/data/name', operator: 'equals', expectedValue: 'Other' },
+  ]);
+
+  assert.deepEqual(results.map(({ passed }) => passed), [true, true, true, false, false]);
+  assert.equal(results[4].detail.includes('Relay'), false);
+  assert.equal(evaluateJsonPointerAssertions('not json', [{ jsonPointer: '/id', operator: 'exists' }])[0].passed, false);
+});
+
+test('response header assertions are case-insensitive for names and compare values exactly', () => {
+  const results = evaluateResponseHeaderAssertions({ 'content-type': 'application/json', 'x-trace-id': 'trace-123' }, [
+    { name: 'Content-Type', operator: 'exists' },
+    { name: 'X-Trace-ID', operator: 'equals', expectedValue: 'trace-123' },
+    { name: 'X-Trace-Id', operator: 'equals', expectedValue: 'wrong' },
+    { name: 'Location', operator: 'exists' },
+  ]);
+
+  assert.deepEqual(results.map(({ passed }) => passed), [true, true, false, false]);
+  assert.equal(results[2].detail.includes('trace-123'), false);
+});
+
+test('response-time assertion passes at its threshold and fails above it', () => {
+  assert.equal(evaluateResponseTimeAssertion(999, 1000).passed, true);
+  assert.equal(evaluateResponseTimeAssertion(1000, 1000).passed, true);
+  assert.equal(evaluateResponseTimeAssertion(1001, 1000).passed, false);
+});
+
+test('run readiness recognizes JSON Pointer and response-header assertions', () => {
+  const readiness = inspectRunReadiness([{
+    name: 'Get item',
+    request: {
+      method: 'GET',
+      url: 'https://api.example.test/items/1',
+      assertions: {
+        maxResponseTimeMs: 1000,
+        jsonPointerAssertions: [{ jsonPointer: '/id', operator: 'exists' }],
+        responseHeaderAssertions: [{ name: 'Content-Type', operator: 'exists' }],
+      },
+    },
+  }], {});
+
+  assert.deepEqual(readiness.blockers, []);
+  assert.deepEqual(readiness.warnings, []);
+});
+
+test('run readiness blocks response-time thresholds outside the supported range', () => {
+  const readiness = inspectRunReadiness([{
+    name: 'Slow check',
+    request: { method: 'GET', url: 'https://api.example.test/items', assertions: { maxResponseTimeMs: 30001 } },
+  }], {});
+
+  assert.equal(readiness.blockers.length, 1);
+  assert.match(readiness.blockers[0].message, /Maximum response time/);
 });
 
 test('schema accepts the supported OAuth2 password grant configuration', () => {

@@ -86,7 +86,8 @@ After a request, the response area can show:
 The request engine uses a 30-second timeout. Assertions work as follows:
 
 - Expected status codes can be edited in the **Tests** tab.
-- JSON Schema and XPath assertions can be configured in the **Tests** tab. JSON Schema validates JSON response structure and values; XPath checks XML response nodes and optional expected text.
+- Set a maximum response time in milliseconds in the **Tests** tab. The check passes when duration is at or below the threshold. Values range from 1 to 30,000 ms; the request timeout remains 30 seconds.
+- JSON Schema, XPath, JSON Pointer, and response-header assertions can be configured in the **Tests** tab. JSON Pointer checks field presence or exact scalar-text equality; response-header checks match names case-insensitively and can check presence or exact value.
 - In **Tests**, add a run-scoped variable name and JSON Pointer such as `/id` to extract a value from a JSON response. Later requests in the collection run can use it as `{{createdId}}`; individual sends do not perform extraction. The value can replace a same-named environment variable for that run. When testing against a mock API, confirm it persists created records before chaining a POST response ID into a later update.
 
 ## Request History
@@ -97,13 +98,13 @@ Requests sent during the current app session appear in the sidebar with method, 
 
 - Collections and folders can be created with names, and folders can be nested under the workspace, a collection, or another folder. Collections and folders can be deleted with confirmation, including their contents. Requests can be created inside collections/folders, renamed, and deleted with confirmation. Moving/reordering items is not implemented.
 - Form-data file uploads are not supported.
-- JSON Schema and XPath assertion rules are saved with the request and run after the response arrives; XPath rules apply to XML responses.
+- Response-time, JSON Schema, XPath, JSON Pointer, and response-header assertion rules are saved with the request and run after the response arrives; XPath rules apply to XML responses.
 - OAuth2 supports only the legacy password grant configured per request; other grants and refresh tokens are not supported.
 - History is session-only and cannot be replayed.
 - Open request tabs are session-only and are not restored when Relay restarts.
 - Extracted JSON Pointer values are available only for the current collection run and do not modify saved environments.
 - The top bar shows the single local workspace; switching workspaces is not implemented. **Copy as cURL** creates a PowerShell-compatible `curl.exe` command for the current request and asks for confirmation before copying it to the clipboard because it may contain credentials. Settings controls are not wired to actions yet.
-- `npm test` runs offline schema/fixture, runner, readiness, response-extraction, credential-protection, OAuth2 helper, report-format, and cURL-builder checks; it does not contact the private RAN identity provider or exercise the UI through Electron.
+- `npm test` runs offline schema/fixture, runner, readiness, offset-pagination, response-extraction/assertion, credential-protection, OAuth2 helper, report-format, and cURL-builder checks; it does not contact the private RAN identity provider or exercise the UI through Electron.
 
 ## Data and Network Notes
 

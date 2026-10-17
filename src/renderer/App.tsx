@@ -6,7 +6,7 @@ import {
   Square,
   Trash2, X,
 } from 'lucide-react';
-import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, HttpMethod, KeyValue, OffsetPaginationConfig, RequestDefinition, RunReportFormat } from '../shared/api';
+import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
 import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
 import { isSensitiveCredentialKey } from '../shared/credentialProtection';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../shared/responseExtraction';
@@ -127,6 +127,16 @@ function removeCollectionItemAtPath(items: CollectionItem[], path: string): Coll
 
 function countRequests(items: CollectionItem[]): number {
   return items.reduce((count, item) => count + Number(Boolean(item.request)) + countRequests(item.items ?? []), 0);
+}
+
+function countConfiguredAssertions(request: RequestDefinition): number {
+  const assertions = request.assertions;
+  return Number(assertions?.expectedStatusCode !== undefined)
+    + Number(assertions?.maxResponseTimeMs !== undefined)
+    + Number(Boolean(assertions?.jsonSchema))
+    + (assertions?.xpathMatches?.length ?? 0)
+    + (assertions?.jsonPointerAssertions?.length ?? 0)
+    + (assertions?.responseHeaderAssertions?.length ?? 0);
 }
 
 function toWorkspaceCollection(imported: CollectionDocument): CollectionDocument {
@@ -1029,7 +1039,7 @@ function App(): JSX.Element {
           </div>
           {request.url.includes('{{') && <div className="url-preview"><span className="url-preview-label">RESOLVES TO</span><span className="url-preview-value">{interpolate(request.url, environment)}</span></div>}
 
-          <div className="request-tabs" role="tablist" aria-label="Request settings">{requestTabs.map((tab) => <button className={requestTab === tab ? 'tab active' : 'tab'} key={tab} role="tab" aria-selected={requestTab === tab} onClick={() => setRequestTab(tab)}>{tab}{tab === 'Headers' && <span className="tab-count">1</span>}{tab === 'Tests' && <span className="tab-count">{request.assertions?.expectedStatusCode ? 1 : 0}</span>}</button>)}</div>
+          <div className="request-tabs" role="tablist" aria-label="Request settings">{requestTabs.map((tab) => <button className={requestTab === tab ? 'tab active' : 'tab'} key={tab} role="tab" aria-selected={requestTab === tab} onClick={() => setRequestTab(tab)}>{tab}{tab === 'Headers' && <span className="tab-count">1</span>}{tab === 'Tests' && <span className="tab-count">{countConfiguredAssertions(request)}</span>}</button>)}</div>
 
           <div className="request-config">
             {requestTab === 'Params' && <><div className="config-table"><div className="table-caption">Query parameters <button className="text-button" onClick={() => updateRequest((current) => ({ ...current, queryParams: [...(current.queryParams ?? []), { key: '', value: '', enabled: true }] }))}><Plus size={13} /> Add parameter</button></div><KeyValueEditor entries={request.queryParams ?? []} onChange={(entries) => updateRequest((current) => ({ ...current, queryParams: entries }))} emptyLabel="No query parameters" /></div><PaginationEditor request={request} onChange={(pagination) => updateRequest((current) => ({ ...current, pagination }))} /></>}
@@ -1050,7 +1060,12 @@ function App(): JSX.Element {
               <div className="assertion-heading"><div className="assertion-icon"><ShieldCheck size={16} /></div><div><strong>Response assertions</strong><span>Validate each response automatically.</span></div></div>
               <label className="field-label" htmlFor="expected-status">Expected status code</label>
               <input id="expected-status" className="status-input" type="number" value={request.assertions?.expectedStatusCode ?? ''} placeholder="200" onChange={(event) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, expectedStatusCode: event.target.value ? Number(event.target.value) : undefined } }))} />
+              <label className="field-label" htmlFor="max-response-time">Maximum response time (ms)</label>
+              <input id="max-response-time" className="status-input" type="number" min="1" max="30000" value={request.assertions?.maxResponseTimeMs ?? ''} placeholder="1000" onChange={(event) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, maxResponseTimeMs: event.target.value ? Number(event.target.value) : undefined } }))} />
+              <div className="body-mode-note">The request fails its check when the measured response time exceeds this limit. Maximum: 30,000 ms.</div>
               <JsonSchemaEditor schema={request.assertions?.jsonSchema} onChange={(jsonSchema) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, jsonSchema } }))} />
+              <JsonPointerAssertionEditor rules={request.assertions?.jsonPointerAssertions ?? []} onChange={(jsonPointerAssertions) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, jsonPointerAssertions } }))} />
+              <ResponseHeaderAssertionEditor rules={request.assertions?.responseHeaderAssertions ?? []} onChange={(responseHeaderAssertions) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, responseHeaderAssertions } }))} />
               <XPathAssertionEditor rules={request.assertions?.xpathMatches ?? []} onChange={(xpathMatches) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, xpathMatches } }))} />
               <ResponseExtractionEditor rules={request.extractVariables ?? []} onChange={(rules) => setRequest((current) => ({ ...current, extractVariables: rules }))} />
             </div>}
@@ -1170,6 +1185,38 @@ function ResponseExtractionEditor({ rules, onChange }: { rules: NonNullable<Requ
     {rules.length ? rules.map((rule, index) => <div className="extraction-row" key={index}><label>Variable<input value={rule.name} placeholder="createdId" onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /></label><label>JSON Pointer<input value={rule.jsonPointer} placeholder="/id" onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, jsonPointer: event.target.value } : item))} /></label><button className="row-remove" title="Remove extraction" aria-label="Remove extraction" onClick={() => onChange(rules.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button></div>) : <div className="empty-table">No response values are extracted</div>}
     <div className="body-mode-note">During a collection run, later requests can use these values as {'{{variableName}}'}. They are temporary and are not saved into the selected environment.</div>
   </div>;
+}
+
+function JsonPointerAssertionEditor({ rules, onChange }: {
+  rules: JsonPointerAssertion[];
+  onChange: (rules: JsonPointerAssertion[]) => void;
+}): JSX.Element {
+  return <section className="assertion-editor-section">
+    <div className="table-caption"><span>JSON Pointer checks</span><button className="text-button" onClick={() => onChange([...rules, { jsonPointer: '', operator: 'exists' }])}><Plus size={13} /> Add check</button></div>
+    {rules.length ? rules.map((rule, index) => <div className="response-assertion-row" key={index}>
+      <label className="auth-field">JSON Pointer<input value={rule.jsonPointer} placeholder="/status" onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, jsonPointer: event.target.value } : item))} /></label>
+      <label className="auth-field">Check<select value={rule.operator} onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, operator: event.target.value as JsonPointerAssertion['operator'] } : item))}><option value="exists">Exists</option><option value="equals">Equals</option></select></label>
+      {rule.operator === 'equals' && <label className="auth-field">Expected text<input value={rule.expectedValue ?? ''} onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, expectedValue: event.target.value } : item))} /></label>}
+      <button className="row-remove" title="Remove JSON Pointer check" aria-label={`Remove JSON Pointer check ${index + 1}`} onClick={() => onChange(rules.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button>
+    </div>) : <div className="empty-table">No JSON Pointer checks configured</div>}
+    <div className="body-mode-note">Equals compares the value as text. JSON Pointer uses paths such as `/items/0/id`.</div>
+  </section>;
+}
+
+function ResponseHeaderAssertionEditor({ rules, onChange }: {
+  rules: ResponseHeaderAssertion[];
+  onChange: (rules: ResponseHeaderAssertion[]) => void;
+}): JSX.Element {
+  return <section className="assertion-editor-section">
+    <div className="table-caption"><span>Response header checks</span><button className="text-button" onClick={() => onChange([...rules, { name: '', operator: 'exists' }])}><Plus size={13} /> Add check</button></div>
+    {rules.length ? rules.map((rule, index) => <div className="response-assertion-row" key={index}>
+      <label className="auth-field">Header name<input value={rule.name} placeholder="Content-Type" onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /></label>
+      <label className="auth-field">Check<select value={rule.operator} onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, operator: event.target.value as ResponseHeaderAssertion['operator'] } : item))}><option value="exists">Exists</option><option value="equals">Equals</option></select></label>
+      {rule.operator === 'equals' && <label className="auth-field">Expected text<input value={rule.expectedValue ?? ''} onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, expectedValue: event.target.value } : item))} /></label>}
+      <button className="row-remove" title="Remove response-header check" aria-label={`Remove response-header check ${index + 1}`} onClick={() => onChange(rules.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button>
+    </div>) : <div className="empty-table">No response-header checks configured</div>}
+    <div className="body-mode-note">Header names are matched case-insensitively; values must match exactly.</div>
+  </section>;
 }
 
 function JsonSchemaEditor({ schema, onChange }: { schema: Record<string, unknown> | undefined; onChange: (schema: Record<string, unknown> | undefined) => void }): JSX.Element {

@@ -68,8 +68,8 @@ Execution details:
 - SOAP uses the same HTTP dispatcher with a raw XML envelope and a user-specified `SOAPAction` header where required. There is no WSDL parser or SOAP wizard.
 - The request timeout is 30 seconds. Network and invalid URL errors return structured failures.
 - TLS verification remains enabled. Electron's network service uses the platform certificate store for HTTPS requests.
-- Assertions implemented: expected status, AJV JSON Schema, and XPath checks. The Tests tab edits all three; JSON Schema applies to JSON response bodies and XPath applies to XML bodies.
-- Offset pagination is opt-in per request and supports query-parameter limit/offset schemes only. Users configure the parameter names, page size, start offset, maximum pages, and response-array JSON Pointer; cursor pagination is not implemented.
+- Assertions implemented: expected status, maximum response time, AJV JSON Schema, XPath, JSON Pointer presence/value, and response-header presence/value checks. Response-time thresholds are capped at the 30-second request timeout. The Tests tab edits these declaratively; JSON Schema and JSON Pointer checks apply to JSON response bodies, XPath applies to XML bodies, and response-header names are matched case-insensitively.
+- Offset pagination runs when a request has pagination settings. Relay infers them on import for one enabled numeric `limit`/`offset` pair; otherwise users can configure the parameter names, page size, start offset, maximum pages, and response-array JSON Pointer manually. Query-parameter offset pagination is supported; cursor pagination is not implemented.
 
 ## Collection Operations
 

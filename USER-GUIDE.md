@@ -54,8 +54,11 @@ Mark sensitive environment, parameter, header, or structured-body values **Secre
 Open the request's **Tests** tab to configure:
 
 - **Expected status code**, for example `200` or `201`.
+- **Maximum response time**, in milliseconds, for example `1000`. The check fails if measured request duration exceeds the threshold. Values range from 1 to 30,000 ms; the request timeout is 30 seconds.
 - **JSON Schema** to validate a JSON response's structure and values.
 - **XPath checks** to check nodes and optional expected text in an XML response.
+- **JSON Pointer checks** to check that a response field exists or exactly equals expected text, for example `/status` equals `active`.
+- **Response header checks** to check that a header exists or exactly equals expected text, for example `Content-Type` equals `application/json`. Header names are case-insensitive.
 - **Run-scoped variables** to extract values from JSON with a JSON Pointer, such as `/id`.
 
 During a collection run, later requests can use extracted values as `{{variableName}}`. They override a same-named environment value only for that run and are not saved into the environment. Individual **Send** actions do not extract values.

@@ -31,6 +31,20 @@ export interface OffsetPaginationConfig {
   itemsJsonPointer: string;
 }
 
+export type ResponseValueOperator = 'exists' | 'equals';
+
+export interface JsonPointerAssertion {
+  jsonPointer: string;
+  operator: ResponseValueOperator;
+  expectedValue?: string;
+}
+
+export interface ResponseHeaderAssertion {
+  name: string;
+  operator: ResponseValueOperator;
+  expectedValue?: string;
+}
+
 export interface CollectionImportResult {
   collection?: CollectionDocument;
   canceled?: boolean;
@@ -93,8 +107,11 @@ export interface RequestDefinition {
   };
   assertions?: {
     expectedStatusCode?: number;
+    maxResponseTimeMs?: number;
     jsonSchema?: Record<string, unknown>;
     xpathMatches?: { xpath: string; expectedValue?: string }[];
+    jsonPointerAssertions?: JsonPointerAssertion[];
+    responseHeaderAssertions?: ResponseHeaderAssertion[];
   };
 }
 

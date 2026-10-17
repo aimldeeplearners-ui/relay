@@ -12,6 +12,7 @@ import type { ApiRequestInput, ApiResponse, AssertionResult, CollectionDocument,
 import { serializeRunReportCsv, serializeRunReportHtml } from '../shared/runReportFormats';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../shared/oauth2PasswordGrant';
 import { buildCurlCommand } from '../shared/curlCommand';
+import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../shared/responseAssertions';
 
 const validateCollection = new Ajv({ allErrors: true }).compile(collectionSchema);
 
@@ -187,7 +188,7 @@ function buildBody(input: ApiRequestInput): { body?: BodyInit; contentType?: str
   return { body: raw, contentType };
 }
 
-function runAssertions(input: ApiRequestInput, status: number, responseBody: string): AssertionResult[] {
+function runAssertions(input: ApiRequestInput, status: number, responseBody: string, responseHeaders: Record<string, string>, durationMs: number): AssertionResult[] {
   const assertions = input.request.assertions;
   if (!assertions) return [];
 
@@ -199,6 +200,12 @@ function runAssertions(input: ApiRequestInput, status: number, responseBody: str
       detail: `Received ${status}`,
     });
   }
+  if (assertions.maxResponseTimeMs !== undefined) {
+    results.push(evaluateResponseTimeAssertion(durationMs, assertions.maxResponseTimeMs));
+  }
+
+  results.push(...evaluateJsonPointerAssertions(responseBody, assertions.jsonPointerAssertions ?? []));
+  results.push(...evaluateResponseHeaderAssertions(responseHeaders, assertions.responseHeaderAssertions ?? []));
 
   if (assertions.jsonSchema) {
     try {
@@ -281,7 +288,7 @@ async function executeRequest(input: ApiRequestInput): Promise<ApiResponse> {
     const body = await response.text();
     const responseHeaders = Object.fromEntries(response.headers.entries());
     const durationMs = Math.round(performance.now() - startedAt);
-    const tests = runAssertions(input, response.status, body);
+    const tests = runAssertions(input, response.status, body, responseHeaders, durationMs);
 
     return {
       status: response.status,
