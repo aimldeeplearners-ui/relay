@@ -1,0 +1,177 @@
+openapi: 3.0.3
+info:
+  title: Relay Local Test API
+  version: 1.0.0
+  description: Credential-free OpenAPI sample for testing Relay's API-definition importer against the bundled local CRUD API.
+servers:
+  - url: http://api.relay.localhost:3000
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: Relay local test API
+  /api/items:
+    get:
+      operationId: listItems
+      summary: List items
+      responses:
+        '200':
+          description: Current items and count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, count]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Item'
+                  count:
+                    type: integer
+                    example: 2
+    post:
+      operationId: createItem
+      summary: Create an item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Created by OpenAPI import
+                description:
+                  type: string
+                  example: Safe local test record
+      responses:
+        '201':
+          description: Created item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+  /api/items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Item identifier
+        schema:
+          type: integer
+          example: 1
+    get:
+      operationId: getItem
+      summary: Get an item
+      responses:
+        '200':
+          description: Requested item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '404':
+          description: Item not found
+    put:
+      operationId: replaceItem
+      summary: Replace an item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Replaced by OpenAPI import
+                description:
+                  type: string
+                  example: Replaced local test record
+      responses:
+        '200':
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '404':
+          description: Item not found
+    patch:
+      operationId: patchItem
+      summary: Update item fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                  example: Patched by OpenAPI import
+      responses:
+        '200':
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '404':
+          description: Item not found
+    delete:
+      operationId: deleteItem
+      summary: Delete an item
+      responses:
+        '200':
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted, id]
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+                  id:
+                    type: integer
+                    example: 1
+        '404':
+          description: Item not found
+components:
+  schemas:
+    Item:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Seed item one
+        description:
+          type: string
+          example: A sample record for GET testing.

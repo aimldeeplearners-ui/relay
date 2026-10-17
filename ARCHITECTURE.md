@@ -26,6 +26,7 @@ flowchart LR
 | Path | Responsibility |
 |---|---|
 | `src/main/index.ts` | Creates the window; executes HTTP requests; substitutes variables; builds bodies and auth headers; runs response assertions; validates imports; protects stored credentials with Electron `safeStorage`; reads and writes workspace files; opens native file dialogs. |
+| `src/main/openApiImport.ts` | Validates Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML definitions through one import action, restricts references to local files beside the selected definition, and converts supported operations into Relay collections. |
 | `src/preload/index.ts` | Exposes the typed `window.relay` API through `contextBridge`; the renderer gets no direct Node.js or filesystem access. |
 | `src/renderer/App.tsx` | Owns the React UI and in-memory view state: workspace tree, collection/folder/request selection, request tabs, environment editor, request builder, response viewer, history, import/export actions. |
 | `src/renderer/styles.css` | Base renderer styles and responsive layout. |
@@ -83,7 +84,7 @@ Non-secret workspace data remains JSON. Auth values, explicitly marked key/value
 
 ### Import
 
-The native file dialog accepts Relay JSON only. The main process parses and validates the selected file with AJV before adding it to the current workspace.
+The Relay collection dialog accepts Relay JSON only. The main process parses and validates the selected file with AJV before adding it to the current workspace.
 
 - At Workspace root, importing adds a named collection.
 - With a collection or folder selected, importing adds a nested folder under that container.
@@ -92,6 +93,8 @@ The native file dialog accepts Relay JSON only. The main process parses and vali
 - Imported requests with exactly one enabled numeric `limit` and `offset` query parameter infer offset-pagination settings unless an explicit configuration already exists. The response-array JSON Pointer remains unset because its value is API-specific.
 
 Third-party API-client exports are not converted or imported. Collection scripts are not executed.
+
+The single **Import OpenAPI definition** action accepts Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML. Swagger Parser validates the definition; HTTP references are disabled, and local external references are restricted to the selected file's directory. The converter creates Relay requests from supported path operations, parameters, bodies, security schemes, and 2xx JSON response schemas. OpenAPI 3.1, remote references, circular references, and unsupported security/body constructs require manual handling or are rejected.
 
 ### Export
 

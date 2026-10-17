@@ -182,6 +182,7 @@ export interface ApiResponse {
 export interface RelayApi {
   executeRequest(input: ApiRequestInput): Promise<ApiResponse>;
   importCollection(): Promise<CollectionImportResult>;
+  importOpenApiDefinition(): Promise<CollectionImportResult>;
   loadCollection(): Promise<CollectionLoadResult>;
   saveCollection(collection: CollectionDocument): Promise<CollectionSaveResult>;
   chooseCollectionLocation(collection: CollectionDocument): Promise<CollectionLocationResult>;

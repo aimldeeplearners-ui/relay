@@ -1,9 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ApiRequestInput, ApiResponse, CollectionDocument, CollectionExportResult, CollectionLoadResult, CollectionLocationResult, CollectionRunReport, CollectionSaveResult, CurlCopyResult, RelayApi, RunReportExportResult, RunReportFormat } from '../shared/api';
+import type { ApiRequestInput, ApiResponse, CollectionDocument, CollectionExportResult, CollectionImportResult, CollectionLoadResult, CollectionLocationResult, CollectionRunReport, CollectionSaveResult, CurlCopyResult, RelayApi, RunReportExportResult, RunReportFormat } from '../shared/api';
 
 const relayApi: RelayApi = {
   executeRequest: (input: ApiRequestInput) => ipcRenderer.invoke('api:execute', input) as Promise<ApiResponse>,
-  importCollection: () => ipcRenderer.invoke('collection:import') as Promise<{ collection?: CollectionDocument; canceled?: boolean; error?: string }>,
+  importCollection: () => ipcRenderer.invoke('collection:import') as Promise<CollectionImportResult>,
+  importOpenApiDefinition: () => ipcRenderer.invoke('openapi:import') as Promise<CollectionImportResult>,
   loadCollection: () => ipcRenderer.invoke('collection:load') as Promise<CollectionLoadResult>,
   saveCollection: (collection: CollectionDocument) => ipcRenderer.invoke('collection:save', collection) as Promise<CollectionSaveResult>,
   chooseCollectionLocation: (collection: CollectionDocument) => ipcRenderer.invoke('collection:choose-location', collection) as Promise<CollectionLocationResult>,

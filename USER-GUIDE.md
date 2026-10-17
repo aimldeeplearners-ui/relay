@@ -21,6 +21,8 @@ In Relay:
 
 When the local API is running, it listens only on your computer at `http://api.relay.localhost:3000`. Its records are held in memory and reset when the server stops.
 
+To test OpenAPI import against the same service, click **Import OpenAPI definition** and choose [the local OpenAPI sample](spec/openapi-local-test-api.yaml). Select the generated **OpenAPI** environment. Start with **Health check** or **List items** using **Send**; the generated Create, Replace, Update, and Delete requests change the local in-memory data. A collection run that includes them asks you to review write requests before continuing.
+
 ## 3. Set Up a Request
 
 ### Create a collection and request
@@ -90,12 +92,15 @@ Click **Copy as cURL** in the request builder. Relay asks for confirmation befor
 
 Relay autosaves the workspace locally after changes. Use the hard-drive button beside **COLLECTIONS** to choose a JSON autosave file; the top-bar save indicator shows status, and hovering over it shows the path. This is separate from export.
 
-To import, click **Import Relay collection JSON** (the download-arrow button beside **COLLECTIONS**) and choose a Relay-format JSON file. At the workspace root, it adds a collection; with a collection/folder selected, it adds the imported items under that location. Existing content is preserved; name conflicts are handled by adding a suffix. Other collection formats are not converted.
+To import an existing Relay collection, click **Import Relay collection JSON** (the download-arrow button beside **COLLECTIONS**) and choose a Relay-format JSON file. At the workspace root, it adds a collection; with a collection/folder selected, it adds the imported items under that location. Existing content is preserved; name conflicts are handled by adding a suffix.
+
+To generate requests from an API definition, use the single **Import OpenAPI definition** action (the code-file button beside **COLLECTIONS**) and choose a JSON or YAML file. It accepts Swagger 2.0, the predecessor to the OpenAPI Specification, and OpenAPI 3.0. It creates folders by path, requests by operation, fills path/query/header parameters and supported bodies/auth schemes, and adds a JSON Schema assertion when a 2xx JSON response schema is available. Select the generated **OpenAPI** environment and review `baseUrl`, credentials, examples, and assertions before sending. Local `$ref` files must be in the selected file's directory; remote references and OpenAPI 3.1 are not supported.
 
 To export, select **Relay workspace**, a collection, or a folder, then click the export button beside **COLLECTIONS** (the folder-arrow button). Relay opens a Save dialog for a separate JSON copy of that scope; this does not change the autosave location. Protected values are redacted by default. Including plaintext secrets requires confirmation; only do so for a trusted destination.
 
 ## Troubleshooting
 
+- **Test import validation:** For an expected Relay-format validation error, import [relay-invalid.json](spec/relay-invalid.json). For an expected OpenAPI definition error, use **Import OpenAPI definition** and choose [openapi-invalid.yaml](spec/openapi-invalid.yaml). Both should show an error and leave the workspace unchanged.
 - **Missing variable:** Choose the intended environment and fill in the named variable. Relay does not display its value in the readiness panel.
 - **Invalid URL:** Check the URL and its environment substitutions. URLs need a scheme such as `https://` or `http://`.
 - **Pagination is off:** Import inference requires one enabled, numeric `limit` row and one enabled, numeric `offset` row. Check **Params** and enable pagination manually if the API uses a different naming scheme.

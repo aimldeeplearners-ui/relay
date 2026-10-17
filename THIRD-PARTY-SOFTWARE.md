@@ -1,14 +1,14 @@
 # Third-Party Software and License Inventory
 
 **Project:** Relay REST/SOAP API Tester  
-**Inventory date:** 2026-10-15  
+**Inventory date:** 2026-10-17
 **Scope:** Current `package.json`, installed npm dependency tree, Windows x64 portable/NSIS packaging, and software embedded in the packaged Electron runtime.
 
 This is a project inventory for engineering and security review, not legal advice. Package license identifiers below come from the installed package manifests. Exact resolved npm versions are recorded in `package-lock.json`; the appendix deduplicates package names and groups them by declared license expression.
 
 ## Summary
 
-Relay's application dependencies use MIT, ISC, or BSD-3-Clause licenses. These are generally permissive and do not require a paid license, but redistribution still requires retaining applicable copyright and license notices. The wider development/build dependency tree also contains Apache-2.0, MPL-2.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0, WTFPL, 0BSD, and multi-license expressions. Those terms and any corporate open-source policy must be reviewed before wider distribution.
+Relay's application dependencies use MIT, ISC, or BSD-3-Clause licenses. These are generally permissive and do not require a paid license, but redistribution still requires retaining applicable copyright and license notices. The wider development/build dependency tree also contains Apache-2.0, MPL-2.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0, PSF-2.0, WTFPL, 0BSD, and multi-license expressions. Those terms and any corporate open-source policy must be reviewed before wider distribution.
 
 The packaged Windows app contains Electron, Chromium, V8, and Node.js. The unpacked package includes Electron's MIT notice (`LICENSE.electron.txt`) and the bundled third-party notices (`LICENSES.chromium.html`), which also includes Node.js license text.
 
@@ -20,6 +20,7 @@ These are the direct npm production dependencies and their purpose in Relay. The
 
 | Package | Locked version | Declared license | Use and impact |
 |---|---:|---|---|
+| `@apidevtools/swagger-parser` | 13.1.0 | MIT | Validates and resolves supported API definition files for conversion into Relay collections. Preserve license and copyright notices. |
 | `@xmldom/xmldom` | 0.8.15 | MIT | Parses XML responses for SOAP/XPath validation. Permissive; preserve license and copyright notice when redistributed. |
 | `ajv` | 8.20.0 | MIT | Validates REST responses against JSON Schema. Permissive; preserve notices. |
 | `lucide-react` | 0.468.0 | ISC | Supplies UI icons. ISC is permissive; retain the notice and license text. |
@@ -31,11 +32,20 @@ These are the direct npm production dependencies and their purpose in Relay. The
 
 | Package | Locked version | Declared license | Use and impact |
 |---|---:|---|---|
+| `@apidevtools/json-schema-ref-parser` | 16.0.5 | MIT | Resolves local API-definition references; HTTP resolution is disabled in Relay. |
+| `@apidevtools/openapi-schemas` | 2.1.0 | MIT | API-definition validation schemas; notice retention. |
+| `@apidevtools/swagger-methods` | 3.0.2 | MIT | HTTP method definitions used by the API parser; notice retention. |
+| `@types/json-schema` | 7.0.15 | MIT | JSON Schema type declarations used by parser dependencies. |
+| `ajv-draft-04` | 1.0.0 | MIT | Swagger 2.0 schema validation support; notice retention. |
 | `fast-deep-equal` | 3.1.3 | MIT | AJV support dependency; notice retention. |
 | `fast-uri` | 3.1.8 | BSD-3-Clause | AJV URI handling; retain notices and do not imply endorsement. |
 | `json-schema-traverse` | 1.0.0 | MIT | AJV schema traversal; notice retention. |
 | `require-from-string` | 2.0.2 | MIT | AJV support dependency; notice retention. |
 | `scheduler` | 0.28.0 | MIT | React scheduling support; notice retention. |
+| `call-me-maybe` | 1.0.2 | MIT | Parser callback/promise interoperability; notice retention. |
+| `openapi-types` | 12.1.3 | MIT | API-definition type declarations. |
+| `js-yaml` | 5.5.0 | MIT | YAML parsing for API-definition imports. |
+| `argparse` | 3.0.3 | PSF-2.0 | YAML parser command-line argument support; review applicable license terms. |
 
 ## Bundled Runtime and Build Software
 

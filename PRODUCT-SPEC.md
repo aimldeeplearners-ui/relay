@@ -7,7 +7,7 @@ Build a professional-grade desktop application (built with **Electron, React, Ty
 
 ## Current Implementation Snapshot (2026-10-16)
 
-The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath/JSON Pointer/header assertions, response-time thresholds, request-level data-driven cases, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. On import, a request with one enabled numeric `limit` and `offset` query parameter pair receives inferred offset-pagination settings; the response-array JSON Pointer remains API-specific. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
+The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML import through one action, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath/JSON Pointer/header assertions, response-time thresholds, request-level data-driven cases, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. Offset pagination is inferred from one enabled numeric `limit`/`offset` pair; its response-array JSON Pointer remains API-specific. OpenAPI 3.1 and remote references are unsupported. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
 
 Still planned or unsupported: request-history replay, third-party collection import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope.
 
@@ -244,7 +244,7 @@ All collection files imported, exported, and stored by the application must stri
 
 ### A. Left Sidebar Workspace
 * **Collections Tree:** Hierarchical folders and requests with support for create, rename, delete, and drag-and-drop ordering.
-* **Import / Export Actions:** Import valid collections via JSON files from disk and export current collections back out.
+* **Import / Export Actions:** Import Relay-format collections; one API-definition action accepts Swagger 2.0 (the predecessor specification) and OpenAPI 3.0. Export current Relay collections as JSON.
 * **Environment Dropdown:** Select active environment variables (`{{domain}}`, `{{bearerToken}}`, etc.) to apply globally across all request runs.
 * **History Tab:** Automatically record executed requests with timestamps, HTTP methods, target URLs, and response status codes.
 

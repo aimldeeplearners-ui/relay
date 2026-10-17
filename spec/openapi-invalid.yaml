@@ -1,0 +1,9 @@
+openapi: 3.0.3
+info:
+  title: Invalid API Definition
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      summary: Invalid operation with no responses
+      responses: {}

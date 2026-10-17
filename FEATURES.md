@@ -23,6 +23,7 @@ Choose a request in the collection tree, review its method and URL, then click *
 - Use the file-plus button to add a request inside the selected collection or folder. Rename it in the request title field; delete it with the trash button in the tree.
 - Opened requests appear as tabs above the request builder. Select a tab to switch between requests; closing a tab does not delete its saved request.
 - Import a Relay-format JSON collection using the folder-import button. Imported files are validated against `RestSoapSpecEnterprise v2.0`. At Workspace root, import adds a collection; with a collection or folder selected, it adds the import as a nested folder. Existing workspace content is preserved.
+- Use the single **Import OpenAPI definition** action for Swagger 2.0, the predecessor specification, or OpenAPI 3.0 JSON/YAML definitions. Relay generates requests, parameters, supported auth/body settings, and JSON Schema checks for supported 2xx JSON responses. Local references are limited to files in the selected definition's directory; remote references and OpenAPI 3.1 are not supported.
 - Use the hard-drive button to choose a JSON file path for saving. The entire workspace autosaves there and is restored next launch. The top bar shows the save state and file path on hover.
 - Select **Relay workspace** and use the download button to export the entire workspace. Select a collection or folder to export only that collection/folder. Export creates a separate JSON copy and does not change the autosave location.
 - Selecting a request loads its method, URL, headers, body, auth configuration, and assertions.
@@ -37,7 +38,7 @@ Choose a request in the collection tree, review its method and URL, then click *
 - Before a run, Relay checks that referenced environment variables are set and request URLs are valid. Missing values and invalid URLs block execution; state-changing requests and requests without response checks require review. The check never displays environment values.
 - The run report shows each request's method, status, duration, response-body size, assertion results, and response-extraction outcomes. Choose JSON, Excel-compatible CSV, or standalone HTML when exporting. All formats omit response bodies, headers, and extracted values.
 
-The importer accepts only Relay's JSON collection format; other API-client exports are not converted.
+The Relay collection importer accepts Relay JSON. The single OpenAPI importer accepts Swagger 2.0 and OpenAPI 3.0 JSON/YAML definitions; other formats are not converted.
 
 ## Request Configuration
 

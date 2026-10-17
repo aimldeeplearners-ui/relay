@@ -1,0 +1,68 @@
+openapi: 3.0.3
+info:
+  title: Inventory API
+  version: 1.0.0
+servers:
+  - url: https://inventory.example.test/v1
+paths:
+  /items/{itemId}:
+    get:
+      summary: Get item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            default: 17
+        - name: expand
+          in: query
+          schema:
+            type: string
+            example: owner
+      responses:
+        '200':
+          description: Item response
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: integer
+                  status:
+                    type: string
+                    enum: [active, retired]
+  /items:
+    post:
+      summary: Create item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Sample item
+      responses:
+        '201':
+          description: Item created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: integer
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

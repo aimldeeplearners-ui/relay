@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import Ajv from 'ajv';
 import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, getTestCaseVariables, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
@@ -9,6 +10,7 @@ import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../src/shared/responseAssertions.ts';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../src/shared/oauth2PasswordGrant.ts';
 import { serializeRunReportCsv, serializeRunReportHtml } from '../src/shared/runReportFormats.ts';
+import { convertOpenApiDocument, importOpenApiFile } from '../src/main/openApiImport.ts';
 
 const schema = JSON.parse(readFileSync(new URL('../spec/rest-soap-spec.json', import.meta.url), 'utf8'));
 const validateCollection = new Ajv({ allErrors: true }).compile(schema);
@@ -583,4 +585,71 @@ test('offset pagination continues on full pages and reports possible truncation 
   assert.deepEqual(getOffsetPaginationProgress(4, pagination, 2), { hasMorePages: false, reachedPageLimit: false });
   assert.deepEqual(getOffsetPaginationProgress(20, pagination, 3), { hasMorePages: false, reachedPageLimit: true });
   assert.deepEqual(getOffsetPaginationProgress(null, pagination, 1), { hasMorePages: false, reachedPageLimit: false });
+});
+
+test('OpenAPI YAML import creates Relay requests, variables, auth, bodies, and response schemas', async () => {
+  const collection = await importOpenApiFile(fileURLToPath(new URL('./fixtures/openapi-minimal.yaml', import.meta.url)));
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+  assert.equal(collection.info.name, 'Inventory API');
+  assert.equal(collection.environments?.[0].values?.find(({ key }) => key === 'baseUrl')?.value, 'https://inventory.example.test/v1');
+
+  const itemsFolder = collection.items.find((item) => item.name === '/items/{itemId}');
+  const getItem = itemsFolder?.items?.find((item) => item.name === 'Get item')?.request;
+  assert.equal(getItem?.url, '{{baseUrl}}/items/{{itemId}}');
+  assert.equal(getItem?.queryParams?.[0].key, 'expand');
+  assert.equal(getItem?.queryParams?.[0].value, 'owner');
+  assert.equal(getItem?.auth?.type, 'bearer');
+  assert.deepEqual(getItem?.assertions?.expectedStatusCode, 200);
+  assert.deepEqual(getItem?.assertions?.jsonSchema?.required, ['id']);
+
+  const createItem = collection.items.find((item) => item.name === '/items')?.items?.[0].request;
+  assert.equal(createItem?.method, 'POST');
+  assert.equal(createItem?.body?.mode, 'json');
+  assert.deepEqual(JSON.parse(createItem?.body?.raw ?? '{}'), { name: 'Sample item' });
+});
+
+test('OpenAPI importer rejects an invalid definition', async () => {
+  const filePath = fileURLToPath(new URL('../spec/openapi-invalid.yaml', import.meta.url));
+  await assert.rejects(importOpenApiFile(filePath));
+});
+
+test('Relay collection schema rejects the invalid Relay JSON fixture', () => {
+  const collection = readCollection('relay-invalid.json');
+  assert.equal(validateCollection(collection), false);
+});
+
+test('local OpenAPI sample converts into a valid credential-free CRUD request collection', async () => {
+  const collection = await importOpenApiFile(fileURLToPath(new URL('../spec/openapi-local-test-api.yaml', import.meta.url)));
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+  assert.equal(collection.environments?.[0].values?.find(({ key }) => key === 'baseUrl')?.value, 'http://api.relay.localhost:3000');
+  assert.deepEqual(collectRunnableRequests(collection.items).map(({ request }) => request.method), [
+    'GET', 'GET', 'POST', 'GET', 'PUT', 'PATCH', 'DELETE',
+  ]);
+  assert.equal(collection.items.some((item) => JSON.stringify(item).includes('password')), false);
+});
+
+test('OpenAPI Swagger 2.0 conversion supports server, query parameters, and API-key security', () => {
+  const collection = convertOpenApiDocument({
+    swagger: '2.0',
+    info: { title: 'Legacy API', version: '2.0' },
+    host: 'legacy.example.test',
+    basePath: '/api',
+    schemes: ['https'],
+    securityDefinitions: { apiKey: { type: 'apiKey', name: 'X-API-Key', in: 'header' } },
+    paths: { '/items': { get: {
+      operationId: 'listItems',
+      security: [{ apiKey: [] }],
+      parameters: [{ name: 'limit', in: 'query', type: 'integer', default: 25 }],
+      responses: { '200': { description: 'OK', schema: { type: 'array', items: { type: 'object' } } } },
+    } } },
+  });
+
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+  assert.equal(collection.environments?.[0].values?.find(({ key }) => key === 'baseUrl')?.value, 'https://legacy.example.test/api');
+  const request = collection.items[0].items?.[0].request;
+  assert.equal(request?.url, '{{baseUrl}}/items');
+  assert.equal(request?.queryParams?.[0].value, '25');
+  assert.equal(request?.auth?.type, 'apikey');
+  assert.equal(request?.auth?.apikey?.key, 'X-API-Key');
+  assert.equal(request?.auth?.apikey?.in, 'header');
 });

@@ -5,13 +5,14 @@ Relay is a Windows desktop application for building and testing REST and SOAP HT
 ## Features
 
 - Organize requests in collections and nested folders; switch between workspace environments.
+- Import Relay collections or use the single API-definition import action for Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML definitions.
 - Configure query parameters, headers, Bearer/Basic/API-key auth, OAuth2 password-grant auth, and JSON, XML, raw, URL-encoded, or text form-data bodies.
 - Validate responses with status and response-time thresholds, JSON Schema, XPath, JSON Pointer, or response-header assertions.
 - Run collections sequentially, exercise named data-driven cases, extract JSON Pointer values for later requests, check run readiness, and use bounded limit/offset pagination. Imports infer pagination when a request has one enabled numeric `limit`/`offset` pair; the response-array JSON Pointer remains API-specific.
 - Copy the active request as a PowerShell-compatible cURL command after confirmation.
 - Export sanitized JSON, CSV, or HTML collection-run reports.
 
-Relay imports its own JSON collection format only. Scripted collections, file uploads, cursor pagination, multiple workspaces, and request-history replay are not supported.
+Relay imports its own JSON collections and API definitions through separate actions. The single API-definition action accepts Swagger 2.0 (the predecessor specification) and OpenAPI 3.0. Other API-client collection formats are not converted. Scripted collections, file uploads, cursor pagination, multiple workspaces, and request-history replay are not supported.
 
 ## Requirements
 
@@ -40,6 +41,8 @@ npm run api:local
 ```
 
 Import [the local CRUD collection](spec/local-api-crud-collection.json) into Relay and select the **Local API** environment. The collection checks list/get, creates an item, extracts its ID for follow-up requests, updates and deletes it, and confirms deletion. Data resets when the API server stops. See [LOCAL-API-SERVER.md](LOCAL-API-SERVER.md) for routes and options.
+
+To test API-definition import against the same service, import [the local OpenAPI sample](spec/openapi-local-test-api.yaml) with **Import OpenAPI definition** and select the generated **OpenAPI** environment.
 
 ## Checks
 

@@ -8,11 +8,12 @@ import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 import collectionSchema from '../../spec/rest-soap-spec.json';
 import { partitionCollectionSecrets, redactCollectionSecrets, restoreCollectionSecrets } from '../shared/credentialProtection';
-import type { ApiRequestInput, ApiResponse, AssertionResult, CollectionDocument, CollectionRunReport, KeyValue, RunReportFormat } from '../shared/api';
+import type { ApiRequestInput, ApiResponse, AssertionResult, CollectionDocument, CollectionImportResult, CollectionRunReport, KeyValue, RunReportFormat } from '../shared/api';
 import { serializeRunReportCsv, serializeRunReportHtml } from '../shared/runReportFormats';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../shared/oauth2PasswordGrant';
 import { buildCurlCommand } from '../shared/curlCommand';
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../shared/responseAssertions';
+import { importOpenApiFile } from './openApiImport';
 
 const validateCollection = new Ajv({ allErrors: true }).compile(collectionSchema);
 
@@ -513,6 +514,30 @@ ipcMain.handle('collection:import', async (event) => {
     return { collection: parsed as unknown as CollectionDocument };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Unable to read this collection file' };
+  }
+});
+
+ipcMain.handle('openapi:import', async (event): Promise<CollectionImportResult> => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const options: OpenDialogOptions = {
+    title: 'Import OpenAPI definition',
+    properties: ['openFile'],
+    filters: [{ name: 'OpenAPI definition', extensions: ['json', 'yaml', 'yml'] }],
+  };
+  const selection = owner
+    ? await dialog.showOpenDialog(owner, options)
+    : await dialog.showOpenDialog(options);
+  if (selection.canceled || !selection.filePaths[0]) return { canceled: true };
+
+  try {
+    const collection = await importOpenApiFile(selection.filePaths[0]);
+    if (!validateCollection(collection)) {
+      const validationErrors = validateCollection.errors?.map((error) => `${error.instancePath || '/'} ${error.message}`).join('; ');
+      return { error: `Generated collection does not match Relay's collection schema: ${validationErrors ?? 'invalid collection structure'}` };
+    }
+    return { collection };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Unable to import this OpenAPI definition' };
   }
 });
 
