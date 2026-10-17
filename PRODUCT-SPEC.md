@@ -5,11 +5,11 @@
 ## 1. Executive Summary & Product Vision
 Build a professional-grade desktop application (built with **Electron, React, TypeScript, and Tailwind CSS**) dedicated exclusively to **REST** and **SOAP** APIs. It must support environment switching, a left-side collection workspace tree, full request configuration (params, headers, auth, multi-mode bodies), and an automated validation/assertion engine (JSON Schema for REST, XPath for SOAP) based on the custom **`RestSoapSpecEnterprise v2.0`** format.
 
-## Current Implementation Snapshot (2026-10-16)
+## Current Implementation Snapshot (2026-10-17)
 
 The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML import through one action, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath/JSON Pointer/header assertions, response-time thresholds, request-level data-driven cases, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. Offset pagination is inferred from one enabled numeric `limit`/`offset` pair; its response-array JSON Pointer remains API-specific. OpenAPI 3.1 and remote references are unsupported. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
 
-Still planned or unsupported: request-history replay, third-party collection import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope.
+Still planned or unsupported: third-party collection import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope. Request history shows previous responses for individual sends and has a separate action to load the request; history remains session-only with a 256 KiB response-body cap per entry.
 
 ---
 
@@ -25,7 +25,7 @@ Still planned or unsupported: request-history replay, third-party collection imp
 ---
 
 ## 3. Data Specification (`RestSoapSpecEnterprise v2.0`)
-All collection files imported, exported, and stored by the application must strictly adhere to the canonical AJV schema at [spec/rest-soap-spec.json](spec/rest-soap-spec.json). The example below mirrors that schema; keep it synchronized when the runtime schema changes.
+Relay-format collection/workspace documents imported, exported, or stored by the application must adhere to the canonical AJV schema at [spec/rest-soap-spec.json](spec/rest-soap-spec.json). Swagger/OpenAPI source definitions are converted into that format. The example below mirrors the canonical schema; keep it synchronized when the runtime schema changes.
 
 ```json
 {
@@ -55,9 +55,7 @@ All collection files imported, exported, and stored by the application must stri
               "properties": {
                 "key": { "type": "string" },
                 "value": { "type": "string" },
-                "enabled": { "type": "boolean" },
-                "secret": { "type": "boolean" },
-                "description": { "type": "string" }
+                "enabled": { "type": "boolean" }
               },
               "required": ["key", "value"]
             }

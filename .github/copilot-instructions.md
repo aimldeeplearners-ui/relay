@@ -3,7 +3,7 @@
 ## 1. Project Overview & Scope
 This project is a desktop-based API testing application built with **Electron, React, TypeScript, and Tailwind CSS**. 
 - **Core Focus:** Dedicated exclusively to **REST** and **SOAP** APIs.
-- **Specification:** All collection files, import/export operations, and state schemas must strictly adhere to **`RestSoapSpecEnterprise v2.0`** (stored in `spec/rest-soap-spec.json`).
+- **Specification:** Relay-format collection/workspace documents must adhere to **`RestSoapSpecEnterprise v2.0`** (stored in `spec/rest-soap-spec.json`). Swagger/OpenAPI source definitions are converted into this format. Transient UI/history state uses shared TypeScript contracts and is not persisted as a collection document.
 - **Forbidden:** Do not introduce support for GraphQL, gRPC, WebSockets, or a collection JavaScript sandbox (`pm.test` scripting). Use declarative validations (JSON Schema and XPath) instead.
 
 ---
@@ -12,10 +12,9 @@ This project is a desktop-based API testing application built with **Electron, R
 When generating code or suggesting packages, adhere strictly to these libraries:
 * **Desktop Framework:** Electron (utilizing secure context isolation and IPC handlers).
 * **UI Framework:** React (Functional components with Hooks) + TypeScript + Tailwind CSS.
-* **Code Editor:** Monaco Editor or CodeMirror for JSON/XML payload editing.
+* **Code Editor:** The current payload editor is a plain text editor; Monaco and CodeMirror are not installed. Do not add an editor dependency unless requested.
 * **HTTP / Execution Clients:** 
-  * **REST:** Axios or native `fetch` wrappers supporting JSON, urlencoded, formdata, and raw modes.
-  * **SOAP:** Custom HTTP dispatcher enforcing `Content-Type: text/xml; charset=utf-8` and transmitting user-defined `SOAPAction` headers alongside raw XML envelopes.
+  * **REST and SOAP:** Use Electron's main-process `net.fetch` dispatcher. It supports JSON, urlencoded, text form-data, and raw modes; SOAP uses the same dispatcher with `Content-Type: text/xml; charset=utf-8` and user-defined `SOAPAction` headers.
 * **Validation & Assertions:**
   * **JSON Schema:** **AJV** (Another JSON Schema Validator) for REST response validation.
   * **XPath:** `xpath` and `xmldom` packages for XML node verification in SOAP responses.
@@ -29,7 +28,7 @@ When generating code or suggesting packages, adhere strictly to these libraries:
 * **Shared types (`src/shared/api.ts`):** Defines the collection, request, environment, response, and IPC contracts.
 * Collection items are recursive. Optional `type` distinguishes `collection` and `folder`; request items carry a `request`. Untyped legacy items remain accepted by the schema.
 
-The product specification describes planned target behavior. Check `FEATURES.md` before assuming a capability is implemented; the current phase supports one API-definition import action for Swagger 2.0 (the predecessor specification) and OpenAPI 3.0, sequential collection runs, request-level data-driven cases, readiness checks, bounded offset pagination, declarative JSON Pointer extraction/assertions, response-header assertions, response-time thresholds, JSON Schema/XPath assertion editors, confirmed Copy as cURL, and sanitized JSON/CSV/HTML reports, but not third-party collection import or JavaScript scripts.
+The product specification describes planned target behavior. Check `FEATURES.md` before assuming a capability is implemented; the current phase supports one API-definition import action for Swagger 2.0 (the predecessor specification) and OpenAPI 3.0, sequential collection runs, session-only request-history response snapshots and unsaved replay drafts, request-level data-driven cases, readiness checks, bounded offset pagination, declarative JSON Pointer extraction/assertions, response-header assertions, response-time thresholds, JSON Schema/XPath assertion editors, confirmed Copy as cURL, and sanitized JSON/CSV/HTML reports, but not third-party collection import or JavaScript scripts.
 
 ---
 

@@ -33,7 +33,7 @@ Update the `baseUrl` value in Relay's **Local API** environment to match. Custom
 | PATCH | `/api/items/:id` | Update supplied fields |
 | DELETE | `/api/items/:id` | Delete an item |
 
-The server starts with two sample items. Created, updated, and deleted data lives only in memory and resets when the server stops. Requests and responses use JSON.
+The server starts with two sample items. Created, updated, and deleted data lives only in memory and resets when the server stops. Requests and responses use JSON; request bodies are limited to 1 MiB. Creating an item requires a non-empty `name`; replacing an item with `PUT` also requires a non-empty `name`. Invalid JSON receives `400`, and an oversized body receives `413`.
 
 ## Test in Relay
 

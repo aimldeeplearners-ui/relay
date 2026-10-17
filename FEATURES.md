@@ -1,7 +1,7 @@
 # Relay Feature Guide
 
 **Status:** Phase 2 desktop prototype  
-**Last reviewed:** 2026-10-16
+**Last reviewed:** 2026-10-17
 
 Relay is a Windows desktop client for sending REST and SOAP HTTP requests, viewing responses, and running supported response assertions. This guide describes the current implementation, including limitations, rather than planned features.
 
@@ -12,7 +12,7 @@ The app opens with a `Relay workspace` containing a `Demo APIs` collection, a `J
 - **Get a post** sends `GET https://jsonplaceholder.typicode.com/posts/1` and expects status `200`.
 - **Create a post** sends a JSON `POST` to `https://jsonplaceholder.typicode.com/posts` and expects status `201 Created`. JSONPlaceholder simulates creation and does not persist the post.
 
-JSONPlaceholder simulates writes but does not persist records created by POST. Use the [local CRUD collection](spec/local-api-crud-collection.json) and [local API guide](LOCAL-API-SERVER.md) to test create, response extraction, update, and delete against a persistent-in-process service.
+JSONPlaceholder simulates writes but does not persist records created by POST. Use the [local CRUD collection](spec/local-api-crud-collection.json) and [local API guide](LOCAL-API-SERVER.md) to test create, response extraction, update, and delete against the stateful local API; its data lasts only until the server stops.
 
 Choose a request in the collection tree, review its method and URL, then click **Send**. The Demo environment requires internet access.
 
@@ -94,7 +94,7 @@ The request engine uses a 30-second timeout. Assertions work as follows:
 
 ## Request History
 
-Requests sent during the current app session appear in the sidebar with method, URL, time, and status. The list is held in memory, is limited to the latest 12 entries internally, and shows up to five entries in the sidebar. It is cleared when the app closes. History entries cannot currently be reopened or replayed.
+Requests sent individually during the current app session appear in the sidebar with method, URL, time, and status. Select an entry to inspect its previous response in the response pane without sending a request. Use **Load request** beside an entry to load its request and environment snapshot into the builder as an unsaved draft; click **Send** only when you want to run it again. History holds up to 12 entries (five shown) in memory and is cleared when the app closes. Response bodies are capped at 256 KiB per entry; truncated bodies are identified in the viewer. History is not persisted or exported, and collection-run requests are not added to it.
 
 ## Current Limitations
 
@@ -102,7 +102,7 @@ Requests sent during the current app session appear in the sidebar with method, 
 - Form-data file uploads are not supported.
 - Response-time, JSON Schema, XPath, JSON Pointer, and response-header assertion rules are saved with the request and run after the response arrives; XPath rules apply to XML responses.
 - OAuth2 supports only the legacy password grant configured per request; other grants and refresh tokens are not supported.
-- History is session-only and cannot be replayed.
+- History responses, request/environment snapshots, and replay drafts are session-only and remain in renderer memory; they are not persisted to disk. Response bodies may contain sensitive data.
 - Open request tabs are session-only and are not restored when Relay restarts.
 - Extracted JSON Pointer values are available only for the current collection run and do not modify saved environments.
 - The top bar shows the single local workspace; switching workspaces is not implemented. **Copy as cURL** creates a PowerShell-compatible `curl.exe` command for the current request and asks for confirmation before copying it to the clipboard because it may contain credentials. Settings controls are not wired to actions yet.

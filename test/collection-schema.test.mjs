@@ -11,6 +11,7 @@ import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evalua
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../src/shared/oauth2PasswordGrant.ts';
 import { serializeRunReportCsv, serializeRunReportHtml } from '../src/shared/runReportFormats.ts';
 import { convertOpenApiDocument, importOpenApiFile } from '../src/main/openApiImport.ts';
+import { createRequestHistoryEntry, createRequestHistoryReplay, MAX_HISTORY_RESPONSE_BODY_BYTES } from '../src/shared/requestHistory.ts';
 
 const schema = JSON.parse(readFileSync(new URL('../spec/rest-soap-spec.json', import.meta.url), 'utf8'));
 const validateCollection = new Ajv({ allErrors: true }).compile(schema);
@@ -234,6 +235,57 @@ test('collection runner passes successful responses and respects configured asse
   assert.equal(isRequestPassing(404, false, [{ label: 'Schema valid', passed: true }]), false);
   assert.equal(isRequestPassing(200, false, [{ label: 'Schema valid', passed: true }, { label: 'Expected field', passed: false }]), false);
   assert.equal(isRequestPassing(200, true, []), false);
+});
+
+test('history replay snapshots request and environment without mutating the original', () => {
+  const request = { method: 'POST', url: '{{baseUrl}}/items', body: { mode: 'json', raw: '{"name":"sample"}' } };
+  const environment = { baseUrl: 'https://api.example.test', token: 'session-secret' };
+  const response = { status: 201, statusText: 'Created', headers: { 'content-type': 'application/json' }, body: '{"id":1}', durationMs: 25, sizeBytes: 8, tests: [] };
+  const entry = createRequestHistoryEntry({
+    id: 'history-1',
+    requestName: 'Create item',
+    method: 'POST',
+    url: 'https://api.example.test/items',
+    status: 201,
+    time: '10:15 AM',
+    request,
+    response,
+    environment,
+    environmentName: 'Test',
+  });
+
+  request.body.raw = 'changed';
+  response.body = 'changed';
+  response.headers['content-type'] = 'text/plain';
+  environment.baseUrl = 'https://other.example.test';
+  assert.equal(entry.request.body.raw, '{"name":"sample"}');
+  assert.equal(entry.response.body, '{"id":1}');
+  assert.equal(entry.response.headers['content-type'], 'application/json');
+  assert.equal(entry.environment.baseUrl, 'https://api.example.test');
+
+  const replay = createRequestHistoryReplay(entry);
+  replay.request.body.raw = 'edited replay draft';
+  replay.environment.token = 'changed';
+  assert.equal(entry.request.body.raw, '{"name":"sample"}');
+  assert.equal(entry.environment.token, 'session-secret');
+});
+
+test('history response bodies are capped at the UTF-8 byte limit', () => {
+  const entry = createRequestHistoryEntry({
+    id: 'history-large',
+    requestName: 'Large response',
+    method: 'GET',
+    url: 'https://api.example.test/large',
+    status: 200,
+    time: '10:16 AM',
+    request: { method: 'GET', url: 'https://api.example.test/large' },
+    response: { status: 200, statusText: 'OK', headers: {}, body: '€'.repeat(MAX_HISTORY_RESPONSE_BODY_BYTES), durationMs: 10, sizeBytes: MAX_HISTORY_RESPONSE_BODY_BYTES * 3, tests: [] },
+    environment: {},
+    environmentName: 'Test',
+  });
+
+  assert.equal(entry.responseBodyTruncated, true);
+  assert.ok(new TextEncoder().encode(entry.response.body).byteLength <= MAX_HISTORY_RESPONSE_BODY_BYTES);
 });
 
 test('response extraction resolves nested, array, and escaped JSON Pointer paths', () => {

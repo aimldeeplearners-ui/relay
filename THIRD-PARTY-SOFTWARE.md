@@ -10,7 +10,7 @@ This is a project inventory for engineering and security review, not legal advic
 
 Relay's application dependencies use MIT, ISC, or BSD-3-Clause licenses. These are generally permissive and do not require a paid license, but redistribution still requires retaining applicable copyright and license notices. The wider development/build dependency tree also contains Apache-2.0, MPL-2.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0, PSF-2.0, WTFPL, 0BSD, and multi-license expressions. Those terms and any corporate open-source policy must be reviewed before wider distribution.
 
-The packaged Windows app contains Electron, Chromium, V8, and Node.js. The unpacked package includes Electron's MIT notice (`LICENSE.electron.txt`) and the bundled third-party notices (`LICENSES.chromium.html`), which also includes Node.js license text.
+The packaged Windows app contains Electron, Chromium, V8, and Node.js. Electron's packaged output provides an MIT notice (`LICENSE.electron.txt`) and bundled third-party notices (`LICENSES.chromium.html`), which includes Node.js license text. Packaging output is generated under `release/` and is not part of this source checkout; verify the notices in each actual release build.
 
 No trusted code-signing certificate is configured. The current Windows executables are unsigned, which can cause SmartScreen warnings; this is a signing/distribution issue, not an open-source license fee.
 
@@ -177,7 +177,7 @@ The following names cover the installed npm tree, including transitive and devel
 ## Project and Compliance Notes
 
 - Relay itself is marked `private` in `package.json` and has no `license` field. This inventory does not grant a license to Relay's own source code; its owner must decide the project's distribution license separately.
-- The portable/NSIS binaries were built from the packages listed in this inventory. Electron and Chromium/Node notices were confirmed in `release/win-unpacked`; preserve these in distributed builds.
+- `release/` output is generated and ignored by Git. After packaging, confirm Electron and Chromium/Node notices exist in `release/win-unpacked` and preserve them in distributed builds; no package artifacts are available in this checkout to re-inspect.
 - Most permissive licenses do not require paying a license fee, but redistribution still has notice and attribution obligations. This file is a summary, not a replacement for the upstream license texts.
 - `npm audit` could not be completed in this environment because registry TLS verification failed. An earlier install reported 8 moderate advisories; their status and applicability remain unverified and should be resolved separately from license review.
 - Rebuild this inventory after dependency changes. Use `package-lock.json` for exact versions and re-check package metadata and notices before each external release.

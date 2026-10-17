@@ -4,7 +4,7 @@
 **Baseline date:** 2026-10-15  
 **Status:** Local Windows desktop prototype; not production-certified
 
-This file records the Phase 1 implementation baseline. `FEATURES.md` is the concise user guide, and `ARCHITECTURE.md` describes the code and runtime flow.
+This file records the Phase 1 implementation baseline. `USER-GUIDE.md` documents current user workflows, `FEATURES.md` summarizes implemented capabilities and limits, and `ARCHITECTURE.md` describes the code and runtime flow.
 
 ## Delivered
 

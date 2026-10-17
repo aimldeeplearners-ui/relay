@@ -76,6 +76,10 @@ Before execution, Relay checks the active environment and request URLs. Missing 
 
 The run report lists status, duration, response size, assertions, and extraction results. It omits response bodies, headers, and extracted values. Select JSON, CSV, or HTML and use **Export report** to save it.
 
+## Request History
+
+Requests sent with **Send** appear in **HISTORY** in the sidebar. Select an entry to inspect its previous response in the response pane; this does not send another request. Use **Load request** beside it to load its request and environment snapshot into an unsaved builder draft. Relay marks it **HISTORY REPLAY · NOT SAVED**. Click **Send** to issue it again; the draft will not overwrite the saved request. History stores up to 12 entries (the sidebar displays five), stays in memory for the current session, and clears when Relay closes. Each response body is capped at 256 KiB; the viewer notes when a body is truncated. Responses may contain sensitive data, so history is not persisted or exported. Collection-run requests are not added to history.
+
 ## 7. Use Offset Pagination
 
 On Relay-format import, Relay infers pagination for a request with exactly one enabled numeric `limit` and `offset` query parameter. It preserves any explicit pagination configuration, uses those parameter values for page size and starting offset, and sets the maximum to 10 pages. You must provide the response-array JSON Pointer in the request's **Params** tab because response shapes differ between APIs.

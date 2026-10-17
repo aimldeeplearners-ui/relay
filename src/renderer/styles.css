@@ -129,11 +129,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .collection-notice { margin: 7px 5px; padding: 7px 8px; border: 1px solid #dce9df; border-radius: 4px; background: #f2f7f2; color: #496b54; font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
 .import-warning summary { cursor: pointer; font-weight: 650; }
 .import-warning ul { display: grid; gap: 5px; margin: 7px 0 0; padding-left: 14px; color: #735f54; }
-.history-row { display: flex; gap: 9px; align-items: flex-start; padding: 8px 8px; border-radius: 4px; }
+.history-entry { display: flex; align-items: center; gap: 2px; }
+.history-row { display: flex; flex: 1; min-width: 0; gap: 9px; align-items: flex-start; padding: 8px; border: 0; border-radius: 4px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.history-row:disabled { cursor: not-allowed; }
 .history-row:hover { background: #f0f4f0; }
-.history-detail { display: flex; flex-direction: column; min-width: 0; gap: 3px; }
+.history-row.selected { background: #e4eee7; }
+.history-detail { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 3px; }
 .history-detail b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #536057; font-size: 9px; font-weight: 550; }
 .history-detail small { color: #9aa39c; font-size: 9px; }
+.history-load-button { flex: 0 0 26px; }
+.history-replay-notice { margin: 6px 0 0; padding: 8px 10px; border-left: 2px solid var(--green); border-radius: 3px; background: var(--green-wash); color: var(--muted); font-size: 10px; line-height: 1.45; }
+.history-replay-notice strong { color: var(--green-dark); }
+.history-response-notice { padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--green-wash); color: var(--muted); font-size: 11px; line-height: 1.45; }
+.history-response-notice strong { color: var(--green-dark); }
 .sidebar-bottom { display: flex; align-items: center; gap: 10px; margin: auto 3px 0; padding: 12px 9px; border-top: 1px solid var(--line); }
 .sidebar-help-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 7px; color: #b06c45; background: #f6ebe3; }
 .sidebar-bottom div:last-child { display: flex; flex-direction: column; gap: 3px; }

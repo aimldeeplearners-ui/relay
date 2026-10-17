@@ -1,7 +1,7 @@
 # Relay Architecture
 
 **Scope:** Current Phase 2 implementation
-**Last reviewed:** 2026-10-16
+**Last reviewed:** 2026-10-17
 
 This guide documents the implemented application structure. The broader product requirements are in [PRODUCT-SPEC.md](PRODUCT-SPEC.md); current user-visible behavior and limitations are in [FEATURES.md](FEATURES.md).
 
@@ -56,7 +56,7 @@ The schema is the data contract, while the shared TypeScript types provide compi
 3. When **Send** is clicked, the renderer sends the request and active environment through `window.relay.executeRequest`.
 4. The preload invokes `api:execute`; the main process interpolates `{{variable}}` values, appends enabled query parameters, builds headers/auth/body, and calls Electron's `net.fetch`.
 5. The main process buffers the response, records duration and body size, then evaluates configured assertions.
-6. The response and assertion results return over IPC and render in the response tabs. Request history is held only in renderer memory for the current session.
+6. The response and assertion results return over IPC and render in the response tabs. Individual-send history snapshots include the request, environment, and bounded response in renderer memory for the current session. Selecting an entry displays its previous response; a separate action loads its request into a temporary builder draft. Neither history nor replay drafts are written to the workspace.
 
 Collection runs use `collectRunnableRequests` to create a depth-first target list for the selected collection/folder or whole workspace. Before execution, readiness checks block missing/blank environment values and invalid URLs, and ask users to review write methods or requests without response checks. Requests with named data cases execute once per case in sequence; case variables override saved-environment and earlier run-variable values for that request only. Multi-case requests cannot also extract values for downstream requests, avoiding ambiguous dependencies. The renderer awaits each `api:execute` IPC call sequentially, applies stop-on-failure/manual-stop behavior, and builds a `CollectionRunReport`. Opted-in offset pagination updates the configured limit/offset parameters for each page, uses a JSON Pointer to count the response array, and records each page separately. A full page at the maximum is reported as potentially incomplete. After each response, JSON Pointer extraction rules can add named values to a temporary run-variable map overlaid on the selected environment for later requests. Extracted values do not change saved environments. Reports include request names, methods, status, duration, response size, assertions, and extraction outcomes, but omit response bodies, headers, and extracted values. `report:export` writes sanitized JSON, Excel-compatible CSV, or standalone HTML through a native Save dialog.
 
@@ -109,11 +109,11 @@ Export snapshots the latest active-request edits and opens a native Save dialog.
 ## UI State and Current Limits
 
 - Request tabs are session-only; closing a tab closes the view but does not delete the saved request. Tabs are not restored on next launch.
-- The active workspace, collections, folders, requests, and environments persist together; request history does not.
+- The active workspace, collections, folders, requests, and environments persist together; request history responses and replay drafts remain in renderer memory only. History stores at most 12 individual-send entries and caps each response body at 256 KiB; it is not persisted or exported because response bodies may contain sensitive data.
 - Only one workspace is supported. Multiple collections are supported within it.
 - Collections and folders can be created. Requests can be created, renamed, and deleted; folders and collections can be deleted with confirmation. Moving/reordering items and renaming containers are not implemented.
 - Collection runner, run readiness, run-scoped JSON Pointer extraction, bounded offset pagination, and sanitized JSON/CSV/HTML report export are implemented. Extraction and pagination work only during collection runs; individual requests use only the selected saved environment and send once.
-- Third-party collection import/conversion, OAuth2 grants other than password, refresh-token handling, form-data file upload, request-history replay, and working Settings/workspace-switcher actions are not implemented. Copy as cURL is implemented in the main process and requires confirmation before writing potentially sensitive request data to the clipboard.
+- Third-party collection import/conversion, OAuth2 grants other than password, refresh-token handling, form-data file upload, and working Settings/workspace-switcher actions are not implemented. History captures responses only for individual sends during the current session; selecting an entry displays the snapshot, and loading its request is a separate action. Copy as cURL is implemented in the main process and requires confirmation before writing potentially sensitive request data to the clipboard.
 
 ## Development Checks
 

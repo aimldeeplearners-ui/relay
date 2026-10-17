@@ -73,6 +73,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .history-method.delete { color: #fa8a75; }
 .history-detail b, .sidebar-bottom strong { color: #e3ecea; }
 .history-detail small, .sidebar-bottom span, .history-empty { color: #9eb0b0; }
+.history-row.selected { background: #31565a; color: #f5ffff; }
+.history-load-button { color: #b7c8c8; }
+.history-load-button:hover { color: #fff; }
+.history-replay-notice { border-left-color: var(--green); background: #e2f0ee; color: #607579; }
+.history-replay-notice strong { color: #075f67; }
 .sidebar-bottom { border-color: var(--sidebar-line); }
 .sidebar-help-icon { background: #503d39; color: #ff9d7d; }
 .import-error, .import-warning { background: #463b37; border-color: #77554b; color: #f4c2ae; }

@@ -4,15 +4,17 @@ import {
   Code2, Copy, Download, Ellipsis, Eye, EyeOff, FileCode2, Folder, FolderOpen, Globe2, History,
   FilePlus2, FolderInput, FolderPlus, HardDrive, KeyRound, Layers3, Play, Plus, Search, Send, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
   Square,
-  Trash2, X,
+  RotateCcw, Trash2, X,
 } from 'lucide-react';
 import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, RequestTestCase, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
 import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
 import { isSensitiveCredentialKey } from '../shared/credentialProtection';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../shared/responseExtraction';
+import { createRequestHistoryEntry, createRequestHistoryReplay, type RequestHistoryEntry, type RequestHistoryReplay } from '../shared/requestHistory';
 
 type RequestTab = 'Params' | 'Headers' | 'Auth' | 'Body' | 'Tests';
 type ResponseTab = 'Body' | 'Headers' | 'Tests';
+type HistoryReplayContext = Pick<RequestHistoryReplay, 'requestName' | 'environment' | 'environmentName'>;
 type OAuth2PasswordConfig = NonNullable<NonNullable<RequestDefinition['auth']>['oauth2']>;
 type XPathMatchRule = { xpath: string; expectedValue?: string };
 
@@ -198,6 +200,8 @@ function App(): JSX.Element {
   const [responseTab, setResponseTab] = useState<ResponseTab>('Body');
   const [environmentName, setEnvironmentName] = useState('Demo');
   const [environmentNameDraft, setEnvironmentNameDraft] = useState('Demo');
+  const [historyReplayContext, setHistoryReplayContext] = useState<HistoryReplayContext | null>(null);
+  const [selectedHistoryEntry, setSelectedHistoryEntry] = useState<RequestHistoryEntry | null>(null);
   const [responsesByPath, setResponsesByPath] = useState<Record<string, ApiResponse>>({});
   const [loading, setLoading] = useState(false);
   const [runReport, setRunReport] = useState<CollectionRunReport | null>(null);
@@ -209,7 +213,7 @@ function App(): JSX.Element {
   const stopRunRef = useRef(false);
   const [activeRequest, setActiveRequest] = useState('Get a post');
   const [selectedPath, setSelectedPath] = useState('0.0.0');
-  const response = responsesByPath[selectedPath] ?? null;
+  const response = selectedHistoryEntry?.response ?? responsesByPath[selectedPath] ?? null;
   const [openRequestPaths, setOpenRequestPaths] = useState<string[]>([]);
   const [selectedCollectionPath, setSelectedCollectionPath] = useState('0');
   const [selectedContainerPath, setSelectedContainerPath] = useState('0.0');
@@ -224,13 +228,14 @@ function App(): JSX.Element {
   const [collectionPath, setCollectionPath] = useState('');
   const [saveStatus, setSaveStatus] = useState<'loading' | 'saving' | 'saved' | 'error'>('loading');
   const [environmentEditorOpen, setEnvironmentEditorOpen] = useState(false);
-  const [history, setHistory] = useState<{ method: HttpMethod; url: string; status: number; time: string }[]>([]);
+  const [history, setHistory] = useState<RequestHistoryEntry[]>([]);
   const selectedCollection = selectedCollectionPath === 'workspace' ? undefined : collection.items[Number(selectedCollectionPath)];
   const selectedEnvironment = collection.environments?.find((item) => item.name === environmentName);
   const availableEnvironments = collection.environments?.length ? collection.environments.map((item) => item.name) : ['Local', 'Demo'];
-  const environment = selectedEnvironment
+  const selectedEnvironmentValues = selectedEnvironment
     ? Object.fromEntries((selectedEnvironment.values ?? []).filter((item) => item.enabled !== false).map((item) => [item.key, item.value]))
     : { baseUrl: environmentName === 'Local' ? 'http://localhost:3000' : 'https://jsonplaceholder.typicode.com' };
+  const environment = historyReplayContext?.environment ?? selectedEnvironmentValues;
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -288,14 +293,14 @@ function App(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!collectionLoaded) return;
+    if (!collectionLoaded || historyReplayContext) return;
     setCollection((current) => {
       const items = updateCollectionItemAtPath(current.items, selectedPath, (item) =>
         item.request ? { ...item, request } : item,
       );
       return items === current.items ? current : { ...current, items };
     });
-  }, [request, selectedPath, collectionLoaded]);
+  }, [request, selectedPath, collectionLoaded, historyReplayContext]);
 
   useEffect(() => {
     if (!collectionLoaded || !collectionSaveAllowed) return;
@@ -349,6 +354,7 @@ function App(): JSX.Element {
   }
 
   function getRequestsToRun(): { name: string; requests: ReturnType<typeof collectRunnableRequests> } | null {
+    if (historyReplayContext) return null;
     const currentItems = updateCollectionItemAtPath(collection.items, selectedPath, (item) =>
       item.request ? { ...item, request } : item,
     );
@@ -551,6 +557,7 @@ function App(): JSX.Element {
   const runPassedCount = runReport?.results.filter((result) => result.passed).length ?? 0;
 
   async function sendRequest(): Promise<void> {
+    setSelectedHistoryEntry(null);
     const requestPath = selectedPath;
     const requestToSend = request;
     const environmentToUse = environment;
@@ -559,22 +566,60 @@ function App(): JSX.Element {
     try {
       const result = await window.relay.executeRequest({ request: requestToSend, environment: environmentToUse });
       setResponsesByPath((current) => ({ ...current, [requestPath]: result }));
-      setHistory((entries) => [{
-        method: requestToSend.method,
-        url: interpolate(requestToSend.url, environmentToUse),
-        status: result.status,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      }, ...entries].slice(0, 12));
+      recordHistoryRequest(requestToSend, environmentToUse, result);
     } catch (error) {
       const result = { status: 0, statusText: 'Request failed', headers: {}, body: '', durationMs: 0, sizeBytes: 0, tests: [], error: error instanceof Error ? error.message : 'Unable to send request' };
       setResponsesByPath((current) => ({ ...current, [requestPath]: result }));
+      recordHistoryRequest(requestToSend, environmentToUse, result);
     } finally {
       setLoading(false);
     }
   }
 
+  function recordHistoryRequest(requestSnapshot: RequestDefinition, environmentSnapshot: Record<string, string>, result: ApiResponse): void {
+    const entry = createRequestHistoryEntry({
+      id: window.crypto.randomUUID(),
+      requestName: historyReplayContext?.requestName ?? (activeRequest || `${requestSnapshot.method} request`),
+      method: requestSnapshot.method,
+      url: interpolate(requestSnapshot.url, environmentSnapshot),
+      status: result.status,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      request: structuredClone(requestSnapshot),
+      response: result,
+      environment: { ...environmentSnapshot },
+      environmentName: historyReplayContext?.environmentName ?? environmentName,
+    });
+    setHistory((entries) => [entry, ...entries].slice(0, 12));
+  }
+
+  function openHistoryRequest(entry: RequestHistoryEntry): void {
+    const replay = createRequestHistoryReplay(entry);
+    setSelectedHistoryEntry(entry);
+    setHistoryReplayContext({
+      requestName: replay.requestName,
+      environment: replay.environment,
+      environmentName: replay.environmentName,
+    });
+    setActiveRequest(replay.requestName);
+    setSelectedPath('history');
+    setRequest(replay.request);
+    setRequestTab('Params');
+    setResponseTab('Body');
+    setRunReport(null);
+    setReadinessReview(null);
+  }
+
+  function selectHistoryResponse(entry: RequestHistoryEntry): void {
+    setSelectedHistoryEntry(entry);
+    setResponseTab('Body');
+    setRunReport(null);
+    setReadinessReview(null);
+  }
+
   function selectRequest(item: CollectionItem, path: string): void {
     if (!item.request) return;
+    setSelectedHistoryEntry(null);
+    setHistoryReplayContext(null);
     setOpenRequestPaths((paths) => paths.includes(path) ? paths : [...paths, path]);
     setActiveRequest(item.name);
     setSelectedPath(path);
@@ -598,12 +643,15 @@ function App(): JSX.Element {
     }
 
     setActiveRequest('');
+    setSelectedHistoryEntry(null);
     setSelectedPath(selectedContainerPath);
     setRequest({ method: 'GET', url: 'https://', headers: [], auth: { type: 'none' }, body: { mode: 'none' } });
   }
 
   function selectContainer(item: CollectionItem, path: string): void {
     if (!item.items) return;
+    setSelectedHistoryEntry(null);
+    setHistoryReplayContext(null);
     const collectionPath = path.split('.')[0];
     setSelectedCollectionPath(collectionPath);
     setSelectedContainerPath(path);
@@ -613,6 +661,8 @@ function App(): JSX.Element {
   }
 
   function selectWorkspace(): void {
+    setSelectedHistoryEntry(null);
+    setHistoryReplayContext(null);
     setSelectedCollectionPath('workspace');
     setSelectedContainerPath('workspace');
     setSelectedPath('workspace');
@@ -683,6 +733,8 @@ function App(): JSX.Element {
 
   function createRequest(): void {
     if (selectedContainerPath === 'workspace') return;
+    setSelectedHistoryEntry(null);
+    setHistoryReplayContext(null);
     const parentPath = getCollectionChildrenAtPath(collection.items, selectedContainerPath)
       ? selectedContainerPath
       : selectedCollectionPath;
@@ -726,6 +778,7 @@ function App(): JSX.Element {
 
   function createNamedItem(): void {
     if (!newItemKind) return;
+    setSelectedHistoryEntry(null);
     const name = newItemName.trim();
     if (!name) return;
 
@@ -977,7 +1030,7 @@ function App(): JSX.Element {
         </div>
         <div className="environment-block">
           <label htmlFor="environment-select">Environment</label>
-          <div className="environment-controls"><div className="select-wrap"><Globe2 size={15} /><span className="environment-select-value">{environmentName}</span><select id="environment-select" aria-label="Environment" value={availableEnvironments.includes(environmentName) ? environmentName : availableEnvironments[0]} onChange={(event) => { setEnvironmentName(event.target.value); setEnvironmentNameDraft(event.target.value); }}>{availableEnvironments.map((name) => <option key={name}>{name}</option>)}</select><ChevronDown size={13} /></div><button className="icon-button small" title="Manage environments" aria-label="Manage environments" disabled={!collectionLoaded} onClick={() => { setEnvironmentNameDraft(environmentName); setEnvironmentEditorOpen(true); }}><SlidersHorizontal size={15} /></button></div>
+          <div className="environment-controls"><div className="select-wrap"><Globe2 size={15} /><span className="environment-select-value">{environmentName}</span><select id="environment-select" aria-label="Environment" disabled={Boolean(historyReplayContext)} value={availableEnvironments.includes(environmentName) ? environmentName : availableEnvironments[0]} onChange={(event) => { setEnvironmentName(event.target.value); setEnvironmentNameDraft(event.target.value); }}>{availableEnvironments.map((name) => <option key={name}>{name}</option>)}</select><ChevronDown size={13} /></div><button className="icon-button small" title="Manage environments" aria-label="Manage environments" disabled={!collectionLoaded || Boolean(historyReplayContext)} onClick={() => { setEnvironmentNameDraft(environmentName); setEnvironmentEditorOpen(true); }}><SlidersHorizontal size={15} /></button></div>
         </div>
 
         <div className="section-heading"><span>COLLECTIONS</span><div className="collection-actions"><button className="icon-button small" title="New collection" aria-label="New collection" disabled={!collectionLoaded} onClick={() => openNewItemDialog('collection')}><Layers3 size={15} /></button><button className="icon-button small" title="New folder in selected location" aria-label="New folder" disabled={!collectionLoaded || !getCollectionChildrenAtPath(collection.items, selectedContainerPath)} onClick={() => openNewItemDialog('folder')}><FolderPlus size={15} /></button><button className="icon-button small" title="New request in selected collection or folder" aria-label="New request" disabled={!collectionLoaded || selectedContainerPath === 'workspace' || !getCollectionChildrenAtPath(collection.items, selectedContainerPath)} onClick={createRequest}><FilePlus2 size={15} /></button><button className="icon-button small" title="Choose workspace autosave location" aria-label="Choose workspace autosave location" disabled={!collectionLoaded} onClick={() => void chooseCollectionLocation()}><HardDrive size={15} /></button><button className="icon-button small" title={selectedContainerPath === 'workspace' ? 'Export workspace copy' : 'Export selected collection or folder'} aria-label="Export selected scope as JSON copy" disabled={!collectionLoaded} onClick={() => void exportCollection()}><FolderInput size={15} /></button><button className="icon-button small" title="Import Relay collection JSON" aria-label="Import Relay collection JSON" disabled={!collectionLoaded} onClick={() => void importCollection()}><Download size={15} /></button><button className="icon-button small" title="Import OpenAPI definition" aria-label="Import OpenAPI definition" disabled={!collectionLoaded} onClick={() => void importCollection('openapi')}><FileCode2 size={15} /></button></div></div>
@@ -987,8 +1040,8 @@ function App(): JSX.Element {
         {collectionNotice && <div className="collection-notice" title={collectionNotice}>Exported copy: {collectionNotice}</div>}
 
         <div className="sidebar-section-heading"><span>HISTORY</span><History size={14} /></div>
-        {history.length ? history.slice(0, 5).map((entry, index) => (
-          <div className="history-row" key={`${entry.time}-${index}`}><span className={`history-method ${entry.method.toLowerCase()}`}>{entry.method}</span><span className="history-detail"><b>{entry.url.replace(/^https?:\/\//, '')}</b><small>{entry.time} · {entry.status || 'ERR'}</small></span></div>
+        {history.length ? history.slice(0, 5).map((entry) => (
+          <div className="history-entry" key={entry.id}><button className={`history-row${selectedHistoryEntry?.id === entry.id ? ' selected' : ''}`} type="button" title="View previous response" aria-label={`View previous response for ${entry.requestName}`} aria-pressed={selectedHistoryEntry?.id === entry.id} onClick={() => selectHistoryResponse(entry)}><span className={`history-method ${entry.method.toLowerCase()}`}>{entry.method}</span><span className="history-detail"><b title={entry.requestName}>{entry.requestName}</b><small title={entry.url}>{entry.url.replace(/^https?:\/\//, '')}</small><small>{entry.time} · {entry.status || 'ERR'}</small></span></button><button className="icon-button small history-load-button" title="Load request only; click Send to execute" aria-label={`Load ${entry.requestName} into the request builder without sending`} disabled={loading || runBusy} onClick={() => openHistoryRequest(entry)}><RotateCcw size={13} /></button></div>
         )) : <div className="history-empty"><Clock3 size={14} /><span>Requests you send will show up here.</span></div>}
 
         <div className="sidebar-bottom"><div className="sidebar-help-icon"><Sparkles size={14} /></div><div><strong>Built for clear answers</strong><span>REST &amp; SOAP, without the noise.</span></div></div>
@@ -1041,12 +1094,13 @@ function App(): JSX.Element {
         </div>
 
         <section className="request-section">
-          <div className="request-title-row"><div><div className="eyebrow request-eyebrow">REQUEST BUILDER</div><input className="request-name-input" aria-label="Request name" value={activeRequest} onChange={(event) => renameActiveRequest(event.target.value)} /></div><div className="request-title-actions"><label className="stop-on-failure"><input type="checkbox" checked={stopOnFailure} disabled={runBusy} onChange={(event) => setStopOnFailure(event.target.checked)} /> Stop on failure</label><button className="runner-button" disabled={!requestsToRun?.requests.length || (runBusy && stopRunRef.current)} onClick={() => runBusy ? stopCollectionRun() : void runSelection()}>{runBusy ? <Square size={13} /> : <Play size={13} />}{runBusy ? 'Stop run' : 'Run selection'}</button><button className="quiet-button" disabled={loading} onClick={() => void copyRequestAsCurl()}><Copy size={14} /> Copy as cURL</button></div></div>
+          <div className="request-title-row"><div><div className="eyebrow request-eyebrow">{historyReplayContext ? 'HISTORY REPLAY · NOT SAVED' : 'REQUEST BUILDER'}</div><input className="request-name-input" aria-label="Request name" value={activeRequest} disabled={Boolean(historyReplayContext)} onChange={(event) => renameActiveRequest(event.target.value)} /></div><div className="request-title-actions"><label className="stop-on-failure"><input type="checkbox" checked={stopOnFailure} disabled={runBusy} onChange={(event) => setStopOnFailure(event.target.checked)} /> Stop on failure</label><button className="runner-button" disabled={!requestsToRun?.requests.length || (runBusy && stopRunRef.current)} onClick={() => runBusy ? stopCollectionRun() : void runSelection()}>{runBusy ? <Square size={13} /> : <Play size={13} />}{runBusy ? 'Stop run' : 'Run selection'}</button><button className="quiet-button" disabled={loading} onClick={() => void copyRequestAsCurl()}><Copy size={14} /> Copy as cURL</button></div></div>
           <div className="url-bar">
             <select className={`method-select method-${request.method.toLowerCase()}`} aria-label="HTTP method" value={request.method} onChange={(event) => updateRequest((current) => ({ ...current, method: event.target.value as HttpMethod }))}>{methods.map((method) => <option key={method}>{method}</option>)}</select>
             <div className="url-input-wrap"><input aria-label="Request URL" value={request.url} onChange={(event) => updateRequest((current) => ({ ...current, url: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') void sendRequest(); }} spellCheck={false} /></div>
             <button className="send-button" onClick={() => void sendRequest()} disabled={loading}><Send size={15} />{loading ? 'Sending' : 'Send'}</button>
           </div>
+          {historyReplayContext && <div className="history-replay-notice">Loaded from session history using environment <strong>{historyReplayContext.environmentName}</strong>. Review it, then click <strong>Send</strong> to replay; changes here are not saved to the collection.</div>}
           {request.url.includes('{{') && <div className="url-preview"><span className="url-preview-label">RESOLVES TO</span><span className="url-preview-value">{interpolate(request.url, environment)}</span></div>}
 
           <div className="request-tabs" role="tablist" aria-label="Request settings">{requestTabs.map((tab) => <button className={requestTab === tab ? 'tab active' : 'tab'} key={tab} role="tab" aria-selected={requestTab === tab} onClick={() => setRequestTab(tab)}>{tab}{tab === 'Headers' && <span className="tab-count">1</span>}{tab === 'Tests' && <span className="tab-count">{countConfiguredAssertions(request)}</span>}</button>)}</div>
@@ -1086,7 +1140,8 @@ function App(): JSX.Element {
         {runReport && <section className="run-report-panel" aria-label="Collection run report"><div className="run-report-heading"><div><strong>{runReport.collectionName}</strong><span>{runProgress} · Environment: {runReport.environmentName}</span></div><div className="run-report-actions"><span>{runPassedCount}/{runReport.results.length} passed</span><select className="report-format-select" aria-label="Run report format" value={runReportFormat} onChange={(event) => setRunReportFormat(event.target.value as RunReportFormat)}><option value="json">JSON</option><option value="csv">CSV (Excel)</option><option value="html">HTML</option></select><button className="quiet-button" disabled={!runReport.results.length || runBusy} onClick={() => void exportRunReport()}><Download size={13} /> Export report</button></div></div>{runReport.results.length > 0 && <div className="run-report-results">{runReport.results.map((result, index) => <div className={`run-report-row ${result.passed ? 'passed' : 'failed'}`} key={`${result.name}-${index}`}><span className={`method-mini ${result.method.toLowerCase()}`}>{result.method}</span><strong>{result.name}</strong><span>{result.status || 'ERR'} {result.statusText}</span><span>{result.durationMs} ms</span><span>{formatBytes(result.sizeBytes)}</span><span className="run-result-outcome">{result.passed ? 'PASS' : 'FAIL'}</span><small title={`${result.assertions.length} assertions`}>{result.assertions.filter((item) => item.passed).length}/{result.assertions.length} assertions</small></div>)}</div>}</section>}
 
         {!runReport && <section className="response-section">
-          <div className="response-heading"><div className="response-title"><span className="response-pulse" /><h2>Response</h2>{response && <span className={`status-pill ${response.error ? 'failed' : response.status < 400 ? 'success' : 'failed'}`}>{response.error ? 'Error' : `${response.status} ${response.statusText}`}</span>}</div><div className="response-metrics">{response && !response.error && <><span><Clock3 size={13} /> {response.durationMs} ms</span><span><FileCode2 size={13} /> {formatBytes(response.sizeBytes)}</span></>}</div></div>
+          <div className="response-heading"><div className="response-title"><span className="response-pulse" /><h2>{selectedHistoryEntry ? 'Previous response' : 'Response'}</h2>{response && <span className={`status-pill ${response.error ? 'failed' : response.status < 400 ? 'success' : 'failed'}`}>{response.error ? 'Error' : `${response.status} ${response.statusText}`}</span>}</div><div className="response-metrics">{response && !response.error && <><span><Clock3 size={13} /> {response.durationMs} ms</span><span><FileCode2 size={13} /> {formatBytes(response.sizeBytes)}</span></>}</div></div>
+          {selectedHistoryEntry && <div className="history-response-notice">Previous response for <strong>{selectedHistoryEntry.requestName}</strong> · {selectedHistoryEntry.time} · Environment: {selectedHistoryEntry.environmentName}.{selectedHistoryEntry.responseBodyTruncated && ' The response body is truncated to 256 KiB in session history.'}</div>}
           <div className="response-tabs" role="tablist" aria-label="Response views">{(['Body', 'Headers', 'Tests'] as ResponseTab[]).map((tab) => <button key={tab} className={responseTab === tab ? 'response-tab active' : 'response-tab'} role="tab" aria-selected={responseTab === tab} onClick={() => setResponseTab(tab)}>{tab}{tab === 'Tests' && response?.tests.length ? <span className="tab-count">{response.tests.length}</span> : null}</button>)}</div>
           <div className="response-content">
             {!response && <div className="response-placeholder"><div className="placeholder-art"><Cloud size={24} /><span className="placeholder-spark one" /><span className="placeholder-spark two" /></div><strong>Your response will land here</strong><span>Send a request to inspect its body, headers, and test results.</span></div>}
