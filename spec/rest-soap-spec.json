@@ -76,6 +76,19 @@
           "required": ["limitParam", "offsetParam", "pageSize", "startOffset", "maxPages", "itemsJsonPointer"],
           "additionalProperties": false
         },
+        "testCases": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "values": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } }
+            },
+            "required": ["name", "values"],
+            "additionalProperties": false
+          }
+        },
         "headers": {
           "type": "array",
           "items": { "$ref": "#/definitions/KeyValue" }

@@ -217,6 +217,10 @@ h1 { margin: 5px 0 0; font-size: 21px; line-height: 1.2; letter-spacing: -.5px; 
 .assertion-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }.assertion-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; background: #e8f2ec; color: #398063; }
 .field-label { display: block; margin-bottom: 5px; color: #68756b; font-size: 9px; }
 .status-input { width: 110px; height: 29px; padding: 0 8px; border: 1px solid #e0e6df; border-radius: 4px; background: #fff; color: #45534a; font-size: 10px; }
+.data-case-card { margin-top: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); }
+.data-case-heading { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 8px; align-items: end; }
+.data-case-heading .row-remove { margin-bottom: 4px; }
+.data-case-card .table-caption { margin: 9px 0 5px; }
 .extraction-editor { margin-top: 14px; }
 .extraction-editor .table-caption { margin-bottom: 5px; }
 .extraction-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 24px; gap: 8px; align-items: end; padding: 8px 0; border-top: 1px solid var(--line); }

@@ -89,6 +89,7 @@ The request engine uses a 30-second timeout. Assertions work as follows:
 - Set a maximum response time in milliseconds in the **Tests** tab. The check passes when duration is at or below the threshold. Values range from 1 to 30,000 ms; the request timeout remains 30 seconds.
 - JSON Schema, XPath, JSON Pointer, and response-header assertions can be configured in the **Tests** tab. JSON Pointer checks field presence or exact scalar-text equality; response-header checks match names case-insensitively and can check presence or exact value.
 - In **Tests**, add a run-scoped variable name and JSON Pointer such as `/id` to extract a value from a JSON response. Later requests in the collection run can use it as `{{createdId}}`; individual sends do not perform extraction. The value can replace a same-named environment variable for that run. When testing against a mock API, confirm it persists created records before chaining a POST response ID into a later update.
+- In **Tests**, add named data-driven cases with key/value overrides. During collection runs, each case runs sequentially with its own report row; override values apply to that request only and can be marked **Secret**. Requests with multiple cases cannot also extract run-scoped variables, and each request is limited to 100 cases.
 
 ## Request History
 

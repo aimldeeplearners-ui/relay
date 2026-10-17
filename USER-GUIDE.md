@@ -60,8 +60,11 @@ Open the request's **Tests** tab to configure:
 - **JSON Pointer checks** to check that a response field exists or exactly equals expected text, for example `/status` equals `active`.
 - **Response header checks** to check that a header exists or exactly equals expected text, for example `Content-Type` equals `application/json`. Header names are case-insensitive.
 - **Run-scoped variables** to extract values from JSON with a JSON Pointer, such as `/id`.
+- **Data-driven cases** to run this request with multiple named variable sets during a collection run. Add a case, give it a unique name, then add key/value overrides such as `region=west` or `limit=0`. Use those keys as `{{region}}` or `{{limit}}` in the request.
 
 During a collection run, later requests can use extracted values as `{{variableName}}`. They override a same-named environment value only for that run and are not saved into the environment. Individual **Send** actions do not extract values.
+
+Each data case runs sequentially and appears as its own result row. Case values override both selected-environment values and earlier extracted values for this request only; they do not carry into later requests. Assertions configured for the request run for every case. More than one data case cannot be combined with response extraction on the same request because that would make downstream values ambiguous. Mark sensitive case values **Secret**; no more than 100 cases are allowed per request.
 
 ## 6. Run a Collection
 

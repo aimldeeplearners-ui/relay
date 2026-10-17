@@ -1,4 +1,4 @@
-import type { AssertionResult, CollectionItem, KeyValue, RequestDefinition } from './api';
+import type { AssertionResult, CollectionItem, KeyValue, RequestDefinition, RequestTestCase } from './api';
 export type { CollectionRunReport, CollectionRunResult } from './api';
 
 export interface CollectionRunTarget {
@@ -15,6 +15,24 @@ export interface RunReadinessIssue {
 export interface RunReadinessReport {
   blockers: RunReadinessIssue[];
   warnings: RunReadinessIssue[];
+}
+
+export function getRequestTestCases(request: RequestDefinition): RequestTestCase[] {
+  return request.testCases?.length ? request.testCases : [{ name: 'Default', values: [] }];
+}
+
+export function getTestCaseVariables(testCase: RequestTestCase): Record<string, string> {
+  return Object.fromEntries(testCase.values
+    .filter((entry) => entry.enabled !== false && entry.key.trim())
+    .map((entry) => [entry.key.trim(), entry.value]));
+}
+
+export function buildTestCaseEnvironment(
+  environment: Record<string, string>,
+  runVariables: Record<string, string>,
+  testCase: RequestTestCase,
+): Record<string, string> {
+  return { ...environment, ...runVariables, ...getTestCaseVariables(testCase) };
 }
 
 export function buildOffsetPaginationRequest(request: RequestDefinition, pageIndex: number): RequestDefinition {
@@ -131,6 +149,7 @@ function requestVariables(request: RequestDefinition): Set<string> {
   if (body?.mode === 'urlencoded') collectEnabledEntryVariables(body.urlencoded, variables);
   else if (body?.mode === 'formdata') collectEnabledEntryVariables(body.formdata, variables);
   else if (body && body.mode !== 'none') collectVariables(body.raw, variables);
+  for (const testCase of request.testCases ?? []) collectEnabledEntryVariables(testCase.values, variables);
   return variables;
 }
 
@@ -151,9 +170,31 @@ export function inspectRunReadiness(
   const requestsWithoutChecks: string[] = [];
   const invalidPagination: string[] = [];
   const invalidResponseTimeLimits: string[] = [];
+  const invalidTestCases: string[] = [];
+  const ambiguousTestCaseExtractions: string[] = [];
+  const tooManyTestCases: string[] = [];
   const runVariables = new Set<string>();
 
   for (const { name, request } of requests) {
+    const testCaseNames = new Set<string>();
+    if ((request.testCases?.length ?? 0) > 100) tooManyTestCases.push(name);
+    for (const testCase of request.testCases ?? []) {
+      const caseName = testCase.name.trim();
+      const variableNames = new Set<string>();
+      let hasDuplicateVariable = false;
+      for (const value of testCase.values) {
+        if (value.enabled === false || !value.key.trim()) continue;
+        const variableName = value.key.trim();
+        if (variableNames.has(variableName)) hasDuplicateVariable = true;
+        variableNames.add(variableName);
+      }
+      if (!caseName || testCaseNames.has(caseName) || hasDuplicateVariable) invalidTestCases.push(name);
+      testCaseNames.add(caseName);
+    }
+    if ((request.testCases?.length ?? 0) > 1 && request.extractVariables?.length) {
+      ambiguousTestCaseExtractions.push(name);
+    }
+
     const maxResponseTimeMs = request.assertions?.maxResponseTimeMs;
     if (maxResponseTimeMs !== undefined && (!Number.isInteger(maxResponseTimeMs) || maxResponseTimeMs < 1 || maxResponseTimeMs > 30_000)) {
       invalidResponseTimeLimits.push(name);
@@ -228,6 +269,15 @@ export function inspectRunReadiness(
   }
   if (invalidResponseTimeLimits.length) {
     blockers.push({ message: 'Maximum response time must be an integer between 1 and 30,000 milliseconds.', requestNames: invalidResponseTimeLimits });
+  }
+  if (invalidTestCases.length) {
+    blockers.push({ message: 'Data cases need unique non-empty names and unique enabled variable keys.', requestNames: [...new Set(invalidTestCases)] });
+  }
+  if (ambiguousTestCaseExtractions.length) {
+    blockers.push({ message: 'A request with multiple data cases cannot also extract run-scoped variables for later requests.', requestNames: ambiguousTestCaseExtractions });
+  }
+  if (tooManyTestCases.length) {
+    blockers.push({ message: 'A request can have at most 100 data cases.', requestNames: tooManyTestCases });
   }
 
   const warnings: RunReadinessIssue[] = [];

@@ -7,7 +7,7 @@ Build a professional-grade desktop application (built with **Electron, React, Ty
 
 ## Current Implementation Snapshot (2026-10-16)
 
-The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath/JSON Pointer/header assertions, response-time thresholds, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. On import, a request with one enabled numeric `limit` and `offset` query parameter pair receives inferred offset-pagination settings; the response-array JSON Pointer remains API-specific. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
+The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath/JSON Pointer/header assertions, response-time thresholds, request-level data-driven cases, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. On import, a request with one enabled numeric `limit` and `offset` query parameter pair receives inferred offset-pagination settings; the response-array JSON Pointer remains API-specific. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
 
 Still planned or unsupported: request-history replay, third-party collection import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope.
 
@@ -107,6 +107,19 @@ All collection files imported, exported, and stored by the application must stri
           },
           "required": ["limitParam", "offsetParam", "pageSize", "startOffset", "maxPages", "itemsJsonPointer"],
           "additionalProperties": false
+        },
+        "testCases": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "values": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } }
+            },
+            "required": ["name", "values"],
+            "additionalProperties": false
+          }
         },
         "headers": {
           "type": "array",
@@ -243,7 +256,7 @@ All collection files imported, exported, and stored by the application must stri
   * **Headers:** Key-value table for request headers (with quick-select options for `Content-Type`, `Accept`, `Authorization`).
   * **Auth:** Support for `No Auth`, `Bearer Token`, `Basic Auth`, `API Key`, and the legacy OAuth2 password grant.
   * **Body:** Mode toggle (`none`, `json`, `xml`, `raw`, `urlencoded`, `formdata`) with a built-in code editor for payloads.
-  * **Tests / Assertions:** Set expected status codes, maximum response time, JSON Schema checks, XPath checks, JSON Pointer presence/value checks, or response-header presence/value checks.
+  * **Tests / Assertions:** Set expected status codes, maximum response time, JSON Schema checks, XPath checks, JSON Pointer presence/value checks, response-header presence/value checks, and named data-driven cases.
 
 ### C. Response Viewer Pane
 * **Status Bar:** Displays returned HTTP status code (color-coded), total round-trip response time in milliseconds, and payload size in bytes.

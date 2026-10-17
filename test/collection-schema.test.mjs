@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import Ajv from 'ajv';
-import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
+import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, getTestCaseVariables, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
 import { partitionCollectionSecrets, redactCollectionSecrets, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
 import { buildCurlCommand } from '../src/shared/curlCommand.ts';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared/responseExtraction.ts';
@@ -97,6 +97,45 @@ test('schema accepts JSON Schema and XPath response assertions', () => {
   };
 
   assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+});
+
+test('schema accepts named request data cases with key/value overrides', () => {
+  const collection = {
+    info: { name: 'Data cases', version: '1.0.0' },
+    items: [{ name: 'List records', request: {
+      method: 'GET',
+      url: 'https://example.test/items/{{recordId}}',
+      testCases: [{ name: 'Existing item', values: [{ key: 'recordId', value: '42', enabled: true }] }],
+    } }],
+  };
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+});
+
+test('data-case helpers default to one run and build overrides from enabled values', () => {
+  assert.deepEqual(getRequestTestCases({ method: 'GET', url: 'https://example.test' }), [{ name: 'Default', values: [] }]);
+  const testCase = { name: 'Boundary', values: [
+    { key: 'limit', value: '100', enabled: true },
+    { key: 'offset', value: '0', enabled: true },
+    { key: 'ignored', value: 'value', enabled: false },
+  ] };
+  assert.deepEqual(getRequestTestCases({ method: 'GET', url: 'https://example.test', testCases: [testCase] }), [testCase]);
+  assert.deepEqual(getTestCaseVariables(testCase), { limit: '100', offset: '0' });
+  assert.deepEqual(buildTestCaseEnvironment({ limit: '10', baseUrl: 'https://api.example.test' }, { recordId: '42', limit: '20' }, testCase), {
+    limit: '100', offset: '0', baseUrl: 'https://api.example.test', recordId: '42',
+  });
+});
+
+test('run readiness blocks ambiguous extraction from multiple data cases and case counts above the limit', () => {
+  const cases = Array.from({ length: 101 }, (_value, index) => ({ name: `Case ${index + 1}`, values: [] }));
+  const readiness = inspectRunReadiness([
+    { name: 'Create record', request: { method: 'POST', url: 'https://api.example.test/items', testCases: [{ name: 'A', values: [] }, { name: 'B', values: [] }], extractVariables: [{ name: 'recordId', jsonPointer: '/id' }] } },
+    { name: 'Too many cases', request: { method: 'GET', url: 'https://api.example.test/items', testCases: cases } },
+  ], {});
+
+  assert.deepEqual(readiness.blockers.map(({ message }) => message), [
+    'A request with multiple data cases cannot also extract run-scoped variables for later requests.',
+    'A request can have at most 100 data cases.',
+  ]);
 });
 
 test('JSON Pointer assertions check presence and exact scalar values without exposing response values', () => {
@@ -263,6 +302,7 @@ test('credential protection separates marked, sensitive-key, and auth values fro
         headers: [{ key: 'X-Api-Key', value: 'header-secret' }],
         auth: { type: 'basic', basic: { username: 'account-name', password: 'auth-secret' } },
         body: { mode: 'json', secret: true, raw: '{"clientSecret":"body-secret"}' },
+        testCases: [{ name: 'Sensitive case', values: [{ key: 'apiToken', value: 'case-secret' }] }],
       } },
       { name: 'OAuth', request: {
         method: 'GET',
@@ -284,8 +324,11 @@ test('credential protection separates marked, sensitive-key, and auth values fro
   assert.equal(serialized.includes('oauth-client-secret'), false);
   assert.equal(serialized.includes('oauth-user'), false);
   assert.equal(serialized.includes('oauth-password'), false);
+  assert.equal(serialized.includes('case-secret'), false);
   assert.equal(serialized.includes('https://example.test'), true);
   assert.equal(parts.collection.environments[0].values[1].secret, true);
+  assert.equal(parts.collection.items[0].items[0].request.testCases[0].values[0].secret, true);
+  assert.equal(restoreCollectionSecrets(parts.collection, parts.secrets).items[0].items[0].request.testCases[0].values[0].value, 'case-secret');
   assert.deepEqual(restoreCollectionSecrets(parts.collection, parts.secrets).environments[0].values.map(({ value }) => value), [
     'https://example.test', 'environment-secret', 'explicit-secret',
   ]);

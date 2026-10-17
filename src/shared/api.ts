@@ -31,6 +31,11 @@ export interface OffsetPaginationConfig {
   itemsJsonPointer: string;
 }
 
+export interface RequestTestCase {
+  name: string;
+  values: KeyValue[];
+}
+
 export type ResponseValueOperator = 'exists' | 'equals';
 
 export interface JsonPointerAssertion {
@@ -81,6 +86,7 @@ export interface RequestDefinition {
   url: string;
   queryParams?: KeyValue[];
   pagination?: OffsetPaginationConfig;
+  testCases?: RequestTestCase[];
   headers?: KeyValue[];
   extractVariables?: { name: string; jsonPointer: string }[];
   auth?: {

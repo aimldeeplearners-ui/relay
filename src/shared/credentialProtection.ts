@@ -50,6 +50,9 @@ function protectItems(items: CollectionItem[], parentPath: string, secrets: Reco
       protectAuth(item.request, path, secrets);
       protectEntries(item.request.queryParams, `${path}.queryParams`, secrets);
       protectEntries(item.request.headers, `${path}.headers`, secrets);
+      for (const [caseIndex, testCase] of (item.request.testCases ?? []).entries()) {
+        protectEntries(testCase.values, `${path}.testCases.${caseIndex}.values`, secrets);
+      }
       if (item.request.body?.secret && item.request.body.raw !== undefined) {
         item.request.body.raw = protectValue(item.request.body.raw, `${path}.body.raw`, secrets);
       }
@@ -103,6 +106,9 @@ function restoreItems(items: CollectionItem[], parentPath: string, secrets: Reco
       restoreAuth(item.request, path, secrets);
       restoreEntries(item.request.queryParams, `${path}.queryParams`, secrets);
       restoreEntries(item.request.headers, `${path}.headers`, secrets);
+      for (const [caseIndex, testCase] of (item.request.testCases ?? []).entries()) {
+        restoreEntries(testCase.values, `${path}.testCases.${caseIndex}.values`, secrets);
+      }
       if (item.request.body?.secret) {
         item.request.body.raw = secrets[`${path}.body.raw`] ?? item.request.body.raw;
       }

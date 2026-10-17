@@ -6,8 +6,8 @@ import {
   Square,
   Trash2, X,
 } from 'lucide-react';
-import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
-import { buildOffsetPaginationRequest, collectRunnableRequests, getOffsetPaginationProgress, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
+import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, RequestTestCase, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
+import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
 import { isSensitiveCredentialKey } from '../shared/credentialProtection';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../shared/responseExtraction';
 
@@ -401,107 +401,115 @@ function App(): JSX.Element {
         }
         const pagination = entry.request.pagination;
         const maxPages = pagination?.maxPages ?? 1;
-        let pageNumber = 0;
-        let continuePages = true;
+        const testCases = getRequestTestCases(entry.request);
         let stopAfterRequest = false;
 
-        while (continuePages && pageNumber < maxPages) {
-          if (stopRunRef.current) {
-            stoppedEarly = true;
-            stopAfterRequest = true;
-            break;
-          }
+        for (const [caseIndex, testCase] of testCases.entries()) {
+          let pageNumber = 0;
+          let continuePages = true;
 
-          const pageIndex = pageNumber;
-          pageNumber += 1;
-          const pageLabel = pagination ? ` · page ${pageNumber} of ${maxPages}` : '';
-          setRunProgress(`Running ${index + 1} of ${target.requests.length}: ${entry.name}${pageLabel}`);
-          let responseForRun: ApiResponse;
-          try {
-            responseForRun = await window.relay.executeRequest({
-              request: pagination ? buildOffsetPaginationRequest(entry.request, pageIndex) : entry.request,
-              environment: { ...environment, ...runVariables },
+          while (continuePages && pageNumber < maxPages) {
+            if (stopRunRef.current) {
+              stoppedEarly = true;
+              stopAfterRequest = true;
+              break;
+            }
+
+            const pageIndex = pageNumber;
+            pageNumber += 1;
+            const caseLabel = entry.request.testCases?.length ? ` · ${testCase.name}` : '';
+            const pageLabel = pagination ? ` · page ${pageNumber} of ${maxPages}` : '';
+            setRunProgress(`Running ${index + 1} of ${target.requests.length}: ${entry.name}${caseLabel}${pageLabel}`);
+            let responseForRun: ApiResponse;
+            try {
+              responseForRun = await window.relay.executeRequest({
+                request: pagination ? buildOffsetPaginationRequest(entry.request, pageIndex) : entry.request,
+                environment: buildTestCaseEnvironment(environment, runVariables, testCase),
+              });
+            } catch {
+              responseForRun = {
+                status: 0,
+                statusText: 'Request failed',
+                headers: {},
+                body: '',
+                durationMs: 0,
+                sizeBytes: 0,
+                tests: [],
+                error: 'Request failed',
+              };
+            }
+
+            const extractionResult = responseForRun.error
+              ? { variables: {}, outcomes: (entry.request.extractVariables ?? []).map(({ name, jsonPointer }) => ({ name, jsonPointer, passed: false })) }
+              : extractResponseVariables(responseForRun.body, entry.request.extractVariables ?? []);
+            Object.assign(runVariables, extractionResult.variables);
+            const extractionAssertions = extractionResult.outcomes.map(({ name, jsonPointer, passed }) => ({
+              label: `Extract ${name} from ${jsonPointer || '(root)'}`,
+              passed,
+            }));
+            const pageItemCount = pagination && !responseForRun.error
+              ? countJsonArrayAtPointer(responseForRun.body, pagination.itemsJsonPointer)
+              : null;
+            const paginationAssertions = pagination ? [{
+              label: `Pagination array at ${pagination.itemsJsonPointer || '(root)'}`,
+              passed: pageItemCount !== null,
+              ...(pageItemCount === null ? { detail: 'Expected a JSON array at the configured pointer.' } : {}),
+            }] : [];
+            const paginationProgress = pagination
+              ? getOffsetPaginationProgress(pageItemCount, pagination, pageNumber)
+              : { hasMorePages: false, reachedPageLimit: false };
+            if (paginationProgress.reachedPageLimit) {
+              paginationAssertions.push({
+                label: `Pagination maximum of ${maxPages} pages reached`,
+                passed: false,
+                detail: 'The last page was full; results may be incomplete.',
+              });
+            }
+
+            const allAssertions = [...responseForRun.tests, ...extractionAssertions, ...paginationAssertions];
+            const passed = isRequestPassing(
+              responseForRun.status,
+              Boolean(responseForRun.error),
+              allAssertions,
+              entry.request.assertions?.expectedStatusCode,
+            );
+            const caseSuffix = entry.request.testCases?.length ? ` · ${testCase.name}` : '';
+            const pageSuffix = pagination ? ` (page ${pageNumber})` : '';
+            results.push({
+              name: `${entry.name}${caseSuffix}${pageSuffix}`,
+              method: entry.request.method,
+              status: responseForRun.status,
+              statusText: responseForRun.statusText,
+              durationMs: responseForRun.durationMs,
+              sizeBytes: responseForRun.sizeBytes,
+              passed,
+              error: Boolean(responseForRun.error),
+              assertions: allAssertions.map(({ label, passed: assertionPassed }) => ({ label, passed: assertionPassed })),
+              extractions: extractionResult.outcomes,
             });
-          } catch {
-            responseForRun = {
-              status: 0,
-              statusText: 'Request failed',
-              headers: {},
-              body: '',
-              durationMs: 0,
-              sizeBytes: 0,
-              tests: [],
-              error: 'Request failed',
-            };
-          }
-
-          const extractionResult = responseForRun.error
-            ? { variables: {}, outcomes: (entry.request.extractVariables ?? []).map(({ name, jsonPointer }) => ({ name, jsonPointer, passed: false })) }
-            : extractResponseVariables(responseForRun.body, entry.request.extractVariables ?? []);
-          Object.assign(runVariables, extractionResult.variables);
-          const extractionAssertions = extractionResult.outcomes.map(({ name, jsonPointer, passed }) => ({
-            label: `Extract ${name} from ${jsonPointer || '(root)'}`,
-            passed,
-          }));
-          const pageItemCount = pagination && !responseForRun.error
-            ? countJsonArrayAtPointer(responseForRun.body, pagination.itemsJsonPointer)
-            : null;
-          const paginationAssertions = pagination ? [{
-            label: `Pagination array at ${pagination.itemsJsonPointer || '(root)'}`,
-            passed: pageItemCount !== null,
-            ...(pageItemCount === null ? { detail: 'Expected a JSON array at the configured pointer.' } : {}),
-          }] : [];
-          const paginationProgress = pagination
-            ? getOffsetPaginationProgress(pageItemCount, pagination, pageNumber)
-            : { hasMorePages: false, reachedPageLimit: false };
-          if (paginationProgress.reachedPageLimit) {
-            paginationAssertions.push({
-              label: `Pagination maximum of ${maxPages} pages reached`,
-              passed: false,
-              detail: 'The last page was full; results may be incomplete.',
+            setRunReport({
+              collectionName: target.name,
+              environmentName,
+              startedAt: startedAt.toISOString(),
+              completedAt: new Date().toISOString(),
+              stoppedEarly: false,
+              results: [...results],
             });
-          }
 
-          const allAssertions = [...responseForRun.tests, ...extractionAssertions, ...paginationAssertions];
-          const passed = isRequestPassing(
-            responseForRun.status,
-            Boolean(responseForRun.error),
-            allAssertions,
-            entry.request.assertions?.expectedStatusCode,
-          );
-          results.push({
-            name: pagination ? `${entry.name} (page ${pageNumber})` : entry.name,
-            method: entry.request.method,
-            status: responseForRun.status,
-            statusText: responseForRun.statusText,
-            durationMs: responseForRun.durationMs,
-            sizeBytes: responseForRun.sizeBytes,
-            passed,
-            error: Boolean(responseForRun.error),
-            assertions: allAssertions.map(({ label, passed: assertionPassed }) => ({ label, passed: assertionPassed })),
-            extractions: extractionResult.outcomes,
-          });
-          setRunReport({
-            collectionName: target.name,
-            environmentName,
-            startedAt: startedAt.toISOString(),
-            completedAt: new Date().toISOString(),
-            stoppedEarly: false,
-            results: [...results],
-          });
-
-          if (!passed && stopOnFailure) {
-            stoppedOnFailure = true;
-            stoppedEarly = paginationProgress.hasMorePages || index < target.requests.length - 1;
-            stopAfterRequest = true;
-            break;
+            if (!passed && stopOnFailure) {
+              stoppedOnFailure = true;
+              stoppedEarly = paginationProgress.hasMorePages || caseIndex < testCases.length - 1 || index < target.requests.length - 1;
+              stopAfterRequest = true;
+              break;
+            }
+            if (stopRunRef.current) {
+              stoppedEarly = paginationProgress.hasMorePages || caseIndex < testCases.length - 1 || index < target.requests.length - 1;
+              stopAfterRequest = true;
+              break;
+            }
+            continuePages = paginationProgress.hasMorePages;
           }
-          if (stopRunRef.current) {
-            stoppedEarly = paginationProgress.hasMorePages || index < target.requests.length - 1;
-            stopAfterRequest = true;
-            break;
-          }
-          continuePages = paginationProgress.hasMorePages;
+          if (stopAfterRequest) break;
         }
         if (stopAfterRequest) break;
       }
@@ -1068,6 +1076,7 @@ function App(): JSX.Element {
               <ResponseHeaderAssertionEditor rules={request.assertions?.responseHeaderAssertions ?? []} onChange={(responseHeaderAssertions) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, responseHeaderAssertions } }))} />
               <XPathAssertionEditor rules={request.assertions?.xpathMatches ?? []} onChange={(xpathMatches) => updateAssertions((current) => ({ ...current, assertions: { ...current.assertions, xpathMatches } }))} />
               <ResponseExtractionEditor rules={request.extractVariables ?? []} onChange={(rules) => setRequest((current) => ({ ...current, extractVariables: rules }))} />
+              <DataDrivenTestCaseEditor testCases={request.testCases ?? []} onChange={(testCases) => updateRequest((current) => ({ ...current, testCases }))} />
             </div>}
           </div>
         </section>
@@ -1185,6 +1194,24 @@ function ResponseExtractionEditor({ rules, onChange }: { rules: NonNullable<Requ
     {rules.length ? rules.map((rule, index) => <div className="extraction-row" key={index}><label>Variable<input value={rule.name} placeholder="createdId" onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /></label><label>JSON Pointer<input value={rule.jsonPointer} placeholder="/id" onChange={(event) => onChange(rules.map((item, itemIndex) => itemIndex === index ? { ...item, jsonPointer: event.target.value } : item))} /></label><button className="row-remove" title="Remove extraction" aria-label="Remove extraction" onClick={() => onChange(rules.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button></div>) : <div className="empty-table">No response values are extracted</div>}
     <div className="body-mode-note">During a collection run, later requests can use these values as {'{{variableName}}'}. They are temporary and are not saved into the selected environment.</div>
   </div>;
+}
+
+function DataDrivenTestCaseEditor({ testCases, onChange }: {
+  testCases: RequestTestCase[];
+  onChange: (testCases: RequestTestCase[]) => void;
+}): JSX.Element {
+  return <section className="assertion-editor-section data-case-editor">
+    <div className="table-caption"><span>Data-driven cases</span><button className="text-button" onClick={() => onChange([...testCases, { name: `Case ${testCases.length + 1}`, values: [] }])}><Plus size={13} /> Add case</button></div>
+    {testCases.length ? testCases.map((testCase, caseIndex) => <div className="data-case-card" key={caseIndex}>
+      <div className="data-case-heading">
+        <label className="auth-field">Case name<input value={testCase.name} onChange={(event) => onChange(testCases.map((item, itemIndex) => itemIndex === caseIndex ? { ...item, name: event.target.value } : item))} /></label>
+        <button className="row-remove" title="Remove data case" aria-label={`Remove data case ${testCase.name || caseIndex + 1}`} onClick={() => onChange(testCases.filter((_, itemIndex) => itemIndex !== caseIndex))}><X size={14} /></button>
+      </div>
+      <div className="table-caption">Variable overrides<button className="text-button" onClick={() => onChange(testCases.map((item, itemIndex) => itemIndex === caseIndex ? { ...item, values: [...item.values, { key: '', value: '', enabled: true }] } : item))}><Plus size={13} /> Add value</button></div>
+      <KeyValueEditor entries={testCase.values} onChange={(values) => onChange(testCases.map((item, itemIndex) => itemIndex === caseIndex ? { ...item, values } : item))} emptyLabel="No variable overrides" />
+    </div>) : <div className="empty-table">No data cases configured; this request runs once.</div>}
+    <div className="body-mode-note">Collection runs execute each case sequentially, up to 100. Case values override environment and earlier run-scoped values for this request only. Multiple cases cannot be combined with response extraction on this request.</div>
+  </section>;
 }
 
 function JsonPointerAssertionEditor({ rules, onChange }: {

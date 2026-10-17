@@ -140,6 +140,8 @@ h1, .request-name-input { color: #1f3035; }
 .assertion-icon { background: #dff0ef; color: #087d83; }
 .assertion-editor-section { margin-top: 14px; }
 .assertion-editor-section .table-caption { margin-bottom: 5px; }
+.data-case-card { border-color: #dce5e3; background: #f8faf9; }
+.data-case-heading .row-remove { opacity: 1; }
 .editor-format-note { color: #8a9690; font-size: 9px; font-weight: 400; }
 .assertion-schema-editor { min-height: 96px; margin-top: 0; }
 .assertion-editor-error { margin-top: 6px; color: #b55244; font-size: 10px; }
