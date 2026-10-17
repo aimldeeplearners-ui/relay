@@ -72,6 +72,7 @@ Before pushing or publishing this repository, review collection files for intern
 ## Documentation
 
 - [User guide](USER-GUIDE.md)
+- [Build guide](BUILD-GUIDE.md)
 - [Feature guide](FEATURES.md)
 - [Architecture](ARCHITECTURE.md)
 - [Product specification](PRODUCT-SPEC.md)

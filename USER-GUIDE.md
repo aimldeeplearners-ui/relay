@@ -2,44 +2,13 @@
 
 This guide walks through setting up Relay, sending a request, validating a response, and running a collection. For your first test, use the included local API so you do not need production credentials or an external service.
 
-## 1. Start Relay
+## 1. Open Relay
 
-From the project folder, install dependencies and start the desktop app:
-
-```powershell
-npm ci
-npm run dev
-```
-
-The project commits `package.json` and `package-lock.json`, not `node_modules`. `npm ci` uses those files to download and install the required library versions on this computer; it requires internet or access to a configured npm registry.
-
-The default workspace contains demo requests. The Demo environment calls a public example service and requires internet access. Use test data only; do not send secrets or confidential payloads to public demo services.
-
-## Build a Windows Installer or Portable App
-
-On Windows, from the project folder after installing dependencies, choose one of these commands:
-
-```powershell
-npm run package:win
-```
-
-This builds the app and creates an NSIS installer in `release/`, named `Relay-Setup-<version>.exe`.
-
-For a portable executable that does not use the installer flow, run:
-
-```powershell
-npm run package:portable
-```
-
-This creates `Relay-Portable-<version>.exe` in `release/`. Both commands package the Windows application; `npm run build` alone only creates the Electron bundles and does not create either executable.
+Launch the installed Relay app. The default workspace contains demo requests. The Demo environment calls a public example service and requires internet access. Use test data only; do not send secrets or confidential payloads to public demo services.
 
 ## 2. Run the Local CRUD Example
 
-Start the local test API in a second PowerShell terminal:
-
-```powershell
-npm run api:local
-```
+The local CRUD example uses a small test API that is separate from the Relay app. If you have the project source, start that API by following [the local API guide](LOCAL-API-SERVER.md). Otherwise, use an API endpoint that is safe for testing.
 
 In Relay:
 
@@ -50,7 +19,7 @@ In Relay:
 5. Review the readiness panel. The sample has write requests, so choose **Run anyway** to proceed.
 6. Review the run report. It checks list/get, creates an item, extracts its ID, updates and deletes it, then verifies the item returns `404`.
 
-The API listens only on your computer at `http://api.relay.localhost:3000`. Its records are held in memory and reset when the server stops. See [LOCAL-API-SERVER.md](LOCAL-API-SERVER.md) for details.
+When the local API is running, it listens only on your computer at `http://api.relay.localhost:3000`. Its records are held in memory and reset when the server stops.
 
 ## 3. Set Up a Request
 
