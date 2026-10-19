@@ -66,6 +66,8 @@ Open the request's **Tests** tab to configure:
 
 During a collection run, later requests can use extracted values as `{{variableName}}`. They override a same-named environment value only for that run and are not saved into the environment. Individual **Send** actions do not extract values.
 
+**Example: pass an access token to later requests.** Put the token request before the protected requests in the collection. On the token request's **Tests** tab, add an extraction with JSON Pointer `/access_token` and variable name `accessToken` (adjust the pointer to match the API's JSON response). On each protected request, set **Auth → Bearer Token** to `{{accessToken}}`. During **Run selection**, Relay extracts the token and resolves the variable for subsequent requests; configure this reference once per protected request, not the token value. A standalone **Send** of the token request does not populate the variable for later individual sends.
+
 Each data case runs sequentially and appears as its own result row. Case values override both selected-environment values and earlier extracted values for this request only; they do not carry into later requests. Assertions configured for the request run for every case. More than one data case cannot be combined with response extraction on the same request because that would make downstream values ambiguous. Mark sensitive case values **Secret**; no more than 100 cases are allowed per request.
 
 ## 6. Run a Collection
