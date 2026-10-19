@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, net, safeStorage, type OpenDialogOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, safeStorage, shell, type OpenDialogOptions } from 'electron';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
@@ -15,6 +15,7 @@ import { buildCurlCommand } from '../shared/curlCommand';
 import { buildMultipartFormData, MAX_FORM_DATA_FILE_BYTES, type SelectedFormDataFile } from '../shared/formData';
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../shared/responseAssertions';
 import { importOpenApiFile } from './openApiImport';
+import { DIAGNOSTIC_LOG_FILE_NAME, getDiagnosticErrorDetails, getDiagnosticLogDirectory, writeDiagnosticLog } from './diagnosticLogger';
 
 const validateCollection = new Ajv({ allErrors: true }).compile(collectionSchema);
 
@@ -22,6 +23,87 @@ const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const protectedCollectionFormat = 'relay-protected-collection';
 const oauthTokenCache = new Map<string, { accessToken: string; expiresAt: number }>();
 const selectedFormDataFiles = new Map<string, { filePath: string; fileName: string }>();
+
+function logDiagnostic(level: 'info' | 'warn' | 'error', event: string, details: Record<string, unknown> = {}): void {
+  try {
+    writeDiagnosticLog(getDiagnosticLogDirectory(app.getPath('userData')), level, event, details);
+  } catch {
+    // Diagnostics must not interrupt application behavior.
+  }
+}
+
+async function openDiagnosticLogFolder(): Promise<void> {
+  const directory = getDiagnosticLogDirectory(app.getPath('userData'));
+  const error = await shell.openPath(directory);
+  if (error) {
+    logDiagnostic('warn', 'diagnostics.folder_open_failed', { errorName: 'ShellOpenPathError' });
+    try {
+      shell.showItemInFolder(join(directory, DIAGNOSTIC_LOG_FILE_NAME));
+    } catch {
+      logDiagnostic('warn', 'diagnostics.folder_reveal_failed', { errorName: 'ShellRevealError' });
+    }
+  }
+}
+
+function createApplicationMenu(): void {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'File',
+      submenu: [
+        { role: 'close' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { role: 'togglefullscreen' },
+        { type: 'separator' },
+        { label: 'Open Diagnostic Logs', click: () => { void openDiagnosticLogFolder(); } },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'close' },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About Relay',
+          click: () => {
+            void dialog.showMessageBox({ type: 'info', title: 'About Relay', message: `Relay ${app.getVersion()}` });
+          },
+        },
+      ],
+    },
+  ]));
+}
+process.on('uncaughtExceptionMonitor', (error) => {
+  logDiagnostic('error', 'main.uncaught_exception', getDiagnosticErrorDetails(error));
+});
 
 interface ProtectedCollectionFile {
   format: typeof protectedCollectionFormat;
@@ -52,7 +134,6 @@ function createStoredCollection(collection: CollectionDocument): CollectionDocum
     encryptedSecrets: safeStorage.encryptString(JSON.stringify(secrets)).toString('base64'),
   };
 }
-
 async function loadStoredCollection(value: unknown, storagePath: string): Promise<CollectionDocument> {
   if (!isRecord(value) || value.format !== protectedCollectionFormat) {
     if (!validateCollection(value)) throw new Error('Saved collection does not match RestSoapSpecEnterprise v2.0.');
@@ -99,14 +180,24 @@ async function getCollectionStoragePath(): Promise<string> {
 
 async function writeJsonAtomically(filePath: string, value: unknown): Promise<void> {
   const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
-  await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  await rename(temporaryPath, filePath);
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    logDiagnostic('error', 'storage.json_write_failed', getDiagnosticErrorDetails(error));
+    throw error;
+  }
 }
 
 async function writeTextAtomically(filePath: string, value: string): Promise<void> {
   const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
-  await writeFile(temporaryPath, value, 'utf8');
-  await rename(temporaryPath, filePath);
+  try {
+    await writeFile(temporaryPath, value, 'utf8');
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    logDiagnostic('error', 'storage.text_write_failed', getDiagnosticErrorDetails(error));
+    throw error;
+  }
 }
 
 function createWindow(): void {
@@ -124,6 +215,14 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    logDiagnostic('error', 'renderer.process_gone', { reason: details.reason, exitCode: details.exitCode });
+  });
+  window.webContents.on('did-fail-load', (_event, errorCode) => {
+    if (errorCode !== -3) logDiagnostic('error', 'renderer.load_failed', { errorCode });
+  });
+  window.on('unresponsive', () => logDiagnostic('warn', 'renderer.unresponsive'));
 
   if (process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -314,6 +413,7 @@ async function executeRequest(input: ApiRequestInput): Promise<ApiResponse> {
       tests,
     };
   } catch (error) {
+    logDiagnostic('warn', 'request.execution_failed', { method: input.request.method, ...getDiagnosticErrorDetails(error) });
     return {
       status: 0,
       statusText: 'Request failed',
@@ -348,11 +448,16 @@ ipcMain.handle('formdata:choose-file', async (event) => {
     selectedFormDataFiles.set(fileToken, { filePath, fileName });
     return { fileToken, fileName };
   } catch (error) {
+    logDiagnostic('warn', 'formdata.file_select_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to read the selected file.' };
   }
 });
 
 ipcMain.handle('api:execute', (_event, input: ApiRequestInput) => executeRequest(input));
+ipcMain.on('diagnostics:renderer-error', (_event, errorName: unknown) => {
+  const safeName = typeof errorName === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/.test(errorName) ? errorName : 'Error';
+  logDiagnostic('error', 'renderer.javascript_error', { errorName: safeName });
+});
 ipcMain.handle('request:copy-curl', async (event, input: ApiRequestInput) => {
   const owner = BrowserWindow.fromWebContents(event.sender);
   const confirmation = {
@@ -377,6 +482,7 @@ ipcMain.handle('request:copy-curl', async (event, input: ApiRequestInput) => {
     clipboard.writeText(buildCurlCommand(input, accessToken, formDataFiles));
     return { copied: true };
   } catch (error) {
+    logDiagnostic('warn', 'request.curl_copy_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to create the cURL command' };
   }
 });
@@ -392,9 +498,11 @@ ipcMain.handle('collection:load', async () => {
       try {
         return { path: await getCollectionStoragePath() };
       } catch (pathError) {
+        logDiagnostic('error', 'collection.path_read_failed', getDiagnosticErrorDetails(pathError));
         return { error: pathError instanceof Error ? pathError.message : 'Unable to read the collection location' };
       }
     }
+    logDiagnostic('error', 'collection.load_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to load the saved collection' };
   }
 });
@@ -409,6 +517,7 @@ ipcMain.handle('collection:save', async (_event, collection: CollectionDocument)
     await writeJsonAtomically(storagePath, createStoredCollection(collection));
     return { saved: true, path: storagePath };
   } catch (error) {
+    logDiagnostic('error', 'collection.save_failed', getDiagnosticErrorDetails(error));
     return { saved: false, error: error instanceof Error ? error.message : 'Unable to save the collection' };
   }
 });
@@ -440,6 +549,7 @@ ipcMain.handle('collection:choose-location', async (event, collection: Collectio
     await writeJsonAtomically(settingsPath, { collectionPath: storagePath });
     return { path: storagePath };
   } catch (error) {
+    logDiagnostic('error', 'collection.location_change_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to change the collection save location' };
   }
 });
@@ -478,6 +588,7 @@ ipcMain.handle('collection:export', async (event, collection: CollectionDocument
     await writeJsonAtomically(exportPath, exportCollection);
     return { exported: true, path: exportPath };
   } catch (error) {
+    logDiagnostic('error', 'collection.export_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to export the collection' };
   }
 });
@@ -529,6 +640,7 @@ ipcMain.handle('report:export', async (event, report: CollectionRunReport, reque
     else await writeJsonAtomically(reportPath, sanitizedReport);
     return { path: reportPath };
   } catch (error) {
+    logDiagnostic('error', 'report.export_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to export the run report' };
   }
 });
@@ -553,6 +665,7 @@ ipcMain.handle('collection:import', async (event) => {
     }
     return { collection: parsed as unknown as CollectionDocument };
   } catch (error) {
+    logDiagnostic('warn', 'collection.import_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to read this collection file' };
   }
 });
@@ -577,15 +690,21 @@ ipcMain.handle('openapi:import', async (event): Promise<CollectionImportResult> 
     }
     return { collection };
   } catch (error) {
+    logDiagnostic('warn', 'openapi.import_failed', getDiagnosticErrorDetails(error));
     return { error: error instanceof Error ? error.message : 'Unable to import this OpenAPI definition' };
   }
 });
 
 app.whenReady().then(() => {
+  logDiagnostic('info', 'app.starting', { version: app.getVersion(), platform: process.platform });
+  createApplicationMenu();
   createWindow();
+  logDiagnostic('info', 'app.ready', { version: app.getVersion(), platform: process.platform });
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+}).catch((error: unknown) => {
+  logDiagnostic('error', 'app.startup_failed', getDiagnosticErrorDetails(error));
 });
 
 app.on('window-all-closed', () => {

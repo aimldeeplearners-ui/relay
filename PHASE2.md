@@ -15,9 +15,9 @@ Add a small automated suite for the most failure-prone Phase 1 contracts:
 - Reject invalid collection metadata and unsupported HTTP methods.
 - Add a repeatable `npm test` command using Node's built-in test runner and existing AJV dependency.
 
-**Completed:** Added `test/collection-schema.test.mjs` and the `npm test` script. The suite started with eight offline tests and now has forty-three covering fixtures, workspace shapes, runner ordering/pass-fail, history response snapshot isolation and body limits, multipart file-field validation and cURL generation, OpenAPI conversion and invalid-import fixtures, readiness checks, data-driven cases, response-time thresholds, offset pagination and import inference, JSON Pointer extraction/assertions, response-header assertions, credential protection, OAuth2 helpers, and report serialization.
+**Completed:** Added `test/collection-schema.test.mjs` and the `npm test` script. The suite started with eight offline tests and now has forty-five covering fixtures, workspace shapes, runner ordering/pass-fail, history response snapshot isolation and body limits, multipart file-field validation and cURL generation, Debug Console secret/body redaction, diagnostic log field allowlisting/rotation, OpenAPI conversion and invalid-import fixtures, readiness checks, data-driven cases, response-time thresholds, offset pagination and import inference, JSON Pointer extraction/assertions, response-header assertions, credential protection, OAuth2 helpers, and report serialization.
 
-**Verification:** The current `npm test` suite passes (43 tests); typecheck and production build pass. The tests do not require network access.
+**Verification:** The current `npm test` suite passes (45 tests); typecheck and production build pass. The tests do not require network access.
 
 ### Step 2: Collection Runner and Test Reports — Complete
 
@@ -25,7 +25,7 @@ Run requests from a selected collection in tree order using the selected environ
 
 **Completed:** The renderer runs a selected collection/folder or the workspace sequentially, supports stop-on-failure and manual stop, displays per-request status/duration/assertion results, and exports sanitized JSON, Excel-compatible CSV, or standalone HTML reports. All formats omit response bodies, headers, and extracted values.
 
-**Verification:** Runner ordering and pass/fail logic have unit coverage. Report serializers are tested for CSV quoting, formula safety, HTML escaping, and omission of response payloads. The 43-test suite, typecheck, and production bundle build pass. Full UI/network orchestration tests remain a follow-up.
+**Verification:** Runner ordering and pass/fail logic have unit coverage. Report serializers are tested for CSV quoting, formula safety, HTML escaping, and omission of response payloads. The 45-test suite, typecheck, and production bundle build pass. Full UI/network orchestration tests remain a follow-up.
 
 ### Step 3: Request Dependencies and Run-Scoped Variables — Complete
 
@@ -33,7 +33,7 @@ Add declarative response extraction (for example, JSON Pointer paths mapped to r
 
 **Completed:** Requests can define JSON Pointer extraction rules in the Tests tab. During a collection run, extracted values are overlaid on the selected environment for subsequent requests; they are temporary and omitted from reports. Missing/invalid paths fail the run assertion and respect stop-on-failure.
 
-**Verification:** Coverage includes nested objects, arrays, escaped JSON Pointer keys, missing paths, invalid JSON, and blank variable names. The current forty-three-test offline suite, typecheck, and production build pass.
+**Verification:** Coverage includes nested objects, arrays, escaped JSON Pointer keys, missing paths, invalid JSON, and blank variable names. The current forty-five-test offline suite, typecheck, and production build pass.
 
 ### Step 4: Credential Protection
 
@@ -41,7 +41,7 @@ Move secrets out of plaintext collection/environment JSON into OS-protected stor
 
 **Completed:** Auth values and secret-marked or sensitive-name key/value rows are removed from saved workspace JSON and stored in an Electron `safeStorage`-encrypted payload. Existing plaintext credentials are migrated atomically on load when OS encryption is available. Raw JSON/XML/text bodies have a **Protect at rest** control. Collection exports redact secrets by default; a confirmation is required to include plaintext values.
 
-**Verification:** Forty-three offline tests pass, including secret partition/restore/redaction and removal of session-only file selections from saved/exported collections; typecheck and production build pass. Legacy migration and encryption require an available OS credential backend. Shared exports that include secrets are plaintext and must be handled as credentials.
+**Verification:** Forty-five offline tests pass, including secret partition/restore/redaction and removal of session-only file selections from saved/exported collections; typecheck and production build pass. Legacy migration and encryption require an available OS credential backend. Shared exports that include secrets are plaintext and must be handled as credentials.
 
 ### Step 5: Remaining Request and Assertion Completeness — Complete
 
@@ -51,11 +51,13 @@ The original Step 5 scope was JSON Schema/XPath assertion editors, OAuth2 passwo
 
 **Remaining:** Step 6 release-readiness work. Other OAuth2 grant types remain conditional on a confirmed need.
 
-**Verification:** Forty-three offline tests pass, including history response snapshot isolation and size limits, multipart file field construction and cURL generation, session-only selection stripping, readiness checks, valid/invalid OpenAPI imports, data-case helpers and protections, response-time thresholds, response assertions, offset pagination and import inference, OAuth2 password-grant helpers, and JSON Schema/XPath schema acceptance; typecheck and production build pass. OAuth2 has not been tested against the private RAN identity provider in this environment.
+**Verification:** Forty-five offline tests pass, including history response snapshot isolation and size limits, multipart file field construction and cURL generation, Debug Console redaction, diagnostic log allowlisting and rotation, session-only selection stripping, readiness checks, valid/invalid OpenAPI imports, data-case helpers and protections, response-time thresholds, response assertions, offset pagination and import inference, OAuth2 password-grant helpers, and JSON Schema/XPath schema acceptance; typecheck and production build pass. OAuth2 has not been tested against the private RAN identity provider in this environment.
 
 ### Step 6: Release Readiness
 
 Resolve and triage npm audit findings, produce an SBOM and license notices, add integration/UI smoke tests for the primary workflows including native file selection and upload, and establish trusted code signing/distribution before wider rollout.
+
+The local Debug Console is implemented for troubleshooting only. It is session-only, body-free, redacts known credential values, and is not a persistent audit log. Separate local diagnostic files rotate at 1 MiB with three backups and contain allowlisted error metadata only.
 
 ## Phase 2 Guardrails
 

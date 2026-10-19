@@ -195,6 +195,7 @@ export interface ApiResponse {
 export interface RelayApi {
   executeRequest(input: ApiRequestInput): Promise<ApiResponse>;
   chooseFormDataFile(): Promise<FormDataFileSelectionResult>;
+  reportRendererError(errorName: string): void;
   importCollection(): Promise<CollectionImportResult>;
   importOpenApiDefinition(): Promise<CollectionImportResult>;
   loadCollection(): Promise<CollectionLoadResult>;

@@ -1,7 +1,7 @@
 # Relay Feature Guide
 
 **Status:** Phase 2 desktop prototype  
-**Last reviewed:** 2026-10-17
+**Last reviewed:** 2026-10-19
 
 Relay is a Windows desktop client for sending REST and SOAP HTTP requests, viewing responses, and running supported response assertions. This guide describes the current implementation, including limitations, rather than planned features.
 
@@ -96,6 +96,12 @@ The request engine uses a 30-second timeout. Assertions work as follows:
 
 Requests sent individually during the current app session appear in the sidebar with method, URL, time, and status. Select an entry to inspect its previous response in the response pane without sending a request. Use **Load request** beside an entry to load its request and environment snapshot into the builder as an unsaved draft; click **Send** only when you want to run it again. History holds up to 12 entries (five shown) in memory and is cleared when the app closes. Response bodies are capped at 256 KiB per entry; truncated bodies are identified in the viewer. History is not persisted or exported, and collection-run requests are not added to it.
 
+## Debug Console
+
+Open **Debug console** from the status bar to inspect recent individual sends and collection-run requests. Entries show time, source, method, a sanitized URL, safe request/response headers, status, duration, response size, and errors. Known credential values are redacted; request and response bodies are never logged. The console keeps up to 500 entries in renderer memory for the current session. **Clear** empties only this in-memory list. This request-debugging view is not an audit trail; entries are not saved or exported.
+
+For Relay startup, renderer, storage, or other app errors, choose **View → Open Diagnostic Logs** from the desktop app menu. The main process writes `relay-diagnostics.log` under Electron's per-user data directory in a `logs` folder. The current file and three rotated backups are each limited to 1 MiB. These JSON-lines diagnostic files contain allowlisted event/error metadata, not request or response bodies, credentials, URLs, or file paths. Opening the folder does not itself create a log entry.
+
 ## Current Limitations
 
 - Collections and folders can be created with names, and folders can be nested under the workspace, a collection, or another folder. Collections and folders can be deleted with confirmation, including their contents. Requests can be created inside collections/folders, renamed, and deleted with confirmation. Moving/reordering items is not implemented.
@@ -103,6 +109,7 @@ Requests sent individually during the current app session appear in the sidebar 
 - Response-time, JSON Schema, XPath, JSON Pointer, and response-header assertion rules are saved with the request and run after the response arrives; XPath rules apply to XML responses.
 - OAuth2 supports only the legacy password grant configured per request; other grants and refresh tokens are not supported.
 - History responses, request/environment snapshots, and replay drafts are session-only and remain in renderer memory; they are not persisted to disk. Response bodies may contain sensitive data.
+- Debug Console entries are session-only, capped at 500, and omitted from workspace saves and exports; bodies are never logged.
 - Open request tabs are session-only and are not restored when Relay restarts.
 - Extracted JSON Pointer values are available only for the current collection run and do not modify saved environments.
 - The top bar shows the single local workspace; switching workspaces is not implemented. **Copy as cURL** creates a PowerShell-compatible `curl.exe` command for the current request and asks for confirmation before copying it to the clipboard because it may contain credentials. Settings controls are not wired to actions yet.

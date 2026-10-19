@@ -4,6 +4,7 @@ import type { ApiRequestInput, ApiResponse, CollectionDocument, CollectionExport
 const relayApi: RelayApi = {
   executeRequest: (input: ApiRequestInput) => ipcRenderer.invoke('api:execute', input) as Promise<ApiResponse>,
   chooseFormDataFile: () => ipcRenderer.invoke('formdata:choose-file') as Promise<FormDataFileSelectionResult>,
+  reportRendererError: (errorName: string) => ipcRenderer.send('diagnostics:renderer-error', errorName),
   importCollection: () => ipcRenderer.invoke('collection:import') as Promise<CollectionImportResult>,
   importOpenApiDefinition: () => ipcRenderer.invoke('openapi:import') as Promise<CollectionImportResult>,
   loadCollection: () => ipcRenderer.invoke('collection:load') as Promise<CollectionLoadResult>,

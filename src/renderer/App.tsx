@@ -3,12 +3,13 @@ import {
   Activity, AlertCircle, Check, ChevronDown, ChevronRight, Clock3, Cloud, FileUp,
   Code2, Copy, Download, Ellipsis, Eye, EyeOff, FileCode2, Folder, FolderOpen, Globe2, History,
   FilePlus2, FolderInput, FolderPlus, HardDrive, KeyRound, Layers3, Play, Plus, Search, Send, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
-  Square,
+  Square, Terminal,
   RotateCcw, Trash2, X,
 } from 'lucide-react';
 import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, FormDataEntry, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, RequestTestCase, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
 import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
 import { isSensitiveCredentialKey } from '../shared/credentialProtection';
+import { createDebugConsoleEntry, MAX_DEBUG_CONSOLE_ENTRIES, type DebugConsoleEntry, type DebugConsoleSource } from '../shared/debugConsole';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../shared/responseExtraction';
 import { createRequestHistoryEntry, createRequestHistoryReplay, type RequestHistoryEntry, type RequestHistoryReplay } from '../shared/requestHistory';
 
@@ -141,6 +142,48 @@ function countConfiguredAssertions(request: RequestDefinition): number {
     + (assertions?.responseHeaderAssertions?.length ?? 0);
 }
 
+function collectDebugSensitiveValues(
+  request: RequestDefinition,
+  environment: Record<string, string>,
+  environmentValues: KeyValue[],
+): string[] {
+  const sensitiveValues = new Set<string>();
+  const addValue = (value: string | undefined): void => {
+    if (!value) return;
+    const resolved = value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (placeholder, name: string) =>
+      Object.hasOwn(environment, name.trim()) ? environment[name.trim()] : placeholder,
+    );
+    if (resolved) sensitiveValues.add(resolved);
+  };
+  const addEntries = (entries: KeyValue[] | undefined): void => {
+    for (const entry of entries ?? []) {
+      if (entry.secret || isSensitiveCredentialKey(entry.key)) addValue(entry.value);
+    }
+  };
+
+  addEntries(environmentValues);
+  addEntries(request.queryParams);
+  addEntries(request.headers);
+  addEntries(request.body?.urlencoded);
+  addEntries(request.body?.formdata);
+  for (const testCase of request.testCases ?? []) addEntries(testCase.values);
+  for (const extraction of request.extractVariables ?? []) {
+    if (isSensitiveCredentialKey(extraction.name)) addValue(environment[extraction.name]);
+  }
+  if (request.auth?.type === 'bearer') addValue(request.auth.bearer?.token);
+  else if (request.auth?.type === 'basic') {
+    addValue(request.auth.basic?.username);
+    addValue(request.auth.basic?.password);
+  } else if (request.auth?.type === 'apikey') addValue(request.auth.apikey?.value);
+  else if (request.auth?.type === 'oauth2') {
+    addValue(request.auth.oauth2?.clientSecret);
+    addValue(request.auth.oauth2?.username);
+    addValue(request.auth.oauth2?.password);
+  }
+  if (request.body?.secret) addValue(request.body.raw);
+  return [...sensitiveValues];
+}
+
 function toWorkspaceCollection(imported: CollectionDocument): CollectionDocument {
   if (imported.info.name === 'Relay workspace') {
     return {
@@ -229,6 +272,8 @@ function App(): JSX.Element {
   const [saveStatus, setSaveStatus] = useState<'loading' | 'saving' | 'saved' | 'error'>('loading');
   const [environmentEditorOpen, setEnvironmentEditorOpen] = useState(false);
   const [history, setHistory] = useState<RequestHistoryEntry[]>([]);
+  const [debugEntries, setDebugEntries] = useState<DebugConsoleEntry[]>([]);
+  const [debugConsoleOpen, setDebugConsoleOpen] = useState(false);
   const selectedCollection = selectedCollectionPath === 'workspace' ? undefined : collection.items[Number(selectedCollectionPath)];
   const selectedEnvironment = collection.environments?.find((item) => item.name === environmentName);
   const availableEnvironments = collection.environments?.length ? collection.environments.map((item) => item.name) : ['Local', 'Demo'];
@@ -426,12 +471,11 @@ function App(): JSX.Element {
             const caseLabel = entry.request.testCases?.length ? ` · ${testCase.name}` : '';
             const pageLabel = pagination ? ` · page ${pageNumber} of ${maxPages}` : '';
             setRunProgress(`Running ${index + 1} of ${target.requests.length}: ${entry.name}${caseLabel}${pageLabel}`);
+            const requestForRun = pagination ? buildOffsetPaginationRequest(entry.request, pageIndex) : entry.request;
+            const environmentForRun = buildTestCaseEnvironment(environment, runVariables, testCase);
             let responseForRun: ApiResponse;
             try {
-              responseForRun = await window.relay.executeRequest({
-                request: pagination ? buildOffsetPaginationRequest(entry.request, pageIndex) : entry.request,
-                environment: buildTestCaseEnvironment(environment, runVariables, testCase),
-              });
+              responseForRun = await window.relay.executeRequest({ request: requestForRun, environment: environmentForRun });
             } catch {
               responseForRun = {
                 status: 0,
@@ -444,6 +488,14 @@ function App(): JSX.Element {
                 error: 'Request failed',
               };
             }
+            recordDebugEntry({
+              source: 'Collection run',
+              requestName: entry.name,
+              context: `${caseLabel}${pageLabel}`.trim() || undefined,
+              request: requestForRun,
+              environment: environmentForRun,
+              response: responseForRun,
+            });
 
             const extractionResult = responseForRun.error
               ? { variables: {}, outcomes: (entry.request.extractVariables ?? []).map(({ name, jsonPointer }) => ({ name, jsonPointer, passed: false })) }
@@ -567,10 +619,12 @@ function App(): JSX.Element {
       const result = await window.relay.executeRequest({ request: requestToSend, environment: environmentToUse });
       setResponsesByPath((current) => ({ ...current, [requestPath]: result }));
       recordHistoryRequest(requestToSend, environmentToUse, result);
+      recordDebugEntry({ source: 'Send', requestName: activeRequest || `${requestToSend.method} request`, request: requestToSend, environment: environmentToUse, response: result });
     } catch (error) {
       const result = { status: 0, statusText: 'Request failed', headers: {}, body: '', durationMs: 0, sizeBytes: 0, tests: [], error: error instanceof Error ? error.message : 'Unable to send request' };
       setResponsesByPath((current) => ({ ...current, [requestPath]: result }));
       recordHistoryRequest(requestToSend, environmentToUse, result);
+      recordDebugEntry({ source: 'Send', requestName: activeRequest || `${requestToSend.method} request`, request: requestToSend, environment: environmentToUse, response: result });
     } finally {
       setLoading(false);
     }
@@ -590,6 +644,23 @@ function App(): JSX.Element {
       environmentName: historyReplayContext?.environmentName ?? environmentName,
     });
     setHistory((entries) => [entry, ...entries].slice(0, 12));
+  }
+
+  function recordDebugEntry(input: {
+    source: DebugConsoleSource;
+    requestName: string;
+    context?: string;
+    request: RequestDefinition;
+    environment: Record<string, string>;
+    response: ApiResponse;
+  }): void {
+    const debugEnvironmentName = historyReplayContext?.environmentName ?? environmentName;
+    const debugEnvironmentValues = collection.environments?.find((item) => item.name === debugEnvironmentName)?.values ?? [];
+    const entry = createDebugConsoleEntry({
+      ...input,
+      sensitiveValues: collectDebugSensitiveValues(input.request, input.environment, debugEnvironmentValues),
+    });
+    setDebugEntries((entries) => [entry, ...entries].slice(0, MAX_DEBUG_CONSOLE_ENTRIES));
   }
 
   function openHistoryRequest(entry: RequestHistoryEntry): void {
@@ -1151,9 +1222,55 @@ function App(): JSX.Element {
             {response && !response.error && responseTab === 'Tests' && <div className="test-results">{response.tests.length ? response.tests.map((test, index) => <div className="test-result" key={`${test.label}-${index}`}><span className={test.passed ? 'test-icon passed' : 'test-icon failed'}>{test.passed ? <Check size={13} /> : <X size={13} />}</span><div><strong>{test.label}</strong>{test.detail && <span>{test.detail}</span>}</div></div>) : <div className="no-tests"><ShieldCheck size={17} /> No assertions are configured for this request.</div>}</div>}
           </div>
         </section>}
-        <footer className="statusbar"><span><span className="status-dot" /> Ready</span><span>REST / SOAP</span><span>Local workspace</span></footer>
+        <footer className="statusbar"><span><span className="status-dot" /> Ready</span><span>REST / SOAP</span><span>Local workspace</span><button className="debug-console-trigger" onClick={() => setDebugConsoleOpen(true)}><Terminal size={13} /> Debug console{debugEntries.length > 0 && <span className="debug-console-count">{debugEntries.length}</span>}</button></footer>
         {readinessReview && <div className="environment-backdrop" role="presentation" onMouseDown={() => setReadinessReview(null)}><section className="environment-dialog readiness-dialog" role="dialog" aria-modal="true" aria-labelledby="readiness-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="environment-dialog-heading"><div><div className="eyebrow">RUN READINESS</div><h2 id="readiness-dialog-title">Review before running</h2></div><button className="icon-button" title="Close readiness check" aria-label="Close readiness check" onClick={() => setReadinessReview(null)}><X size={17} /></button></div><p className="readiness-intro">{readinessReview.targetName} · Environment: {environmentName}</p>{readinessReview.blockers.length > 0 && <section className="readiness-group blocked"><h3>Must fix before running</h3><ul>{readinessReview.blockers.map((issue, index) => <li key={`${issue.message}-${index}`}><strong>{issue.message}</strong><span>{issue.requestNames.join(', ')}</span></li>)}</ul></section>}{readinessReview.warnings.length > 0 && <section className="readiness-group warnings"><h3>Review these warnings</h3><ul>{readinessReview.warnings.map((issue, index) => <li key={`${issue.message}-${index}`}><strong>{issue.message}</strong><span>{issue.requestNames.join(', ')}</span></li>)}</ul></section>}<div className="environment-dialog-footer">Environment values are never displayed in this check.</div><div className="create-item-actions"><button className="quiet-button" onClick={() => setReadinessReview(null)}>{readinessReview.blockers.length ? 'Back to editor' : 'Cancel'}</button>{!readinessReview.blockers.length && <button className="send-button" onClick={() => void runSelection(true)}>Run anyway</button>}</div></section></div>}
       </main>
+      {debugConsoleOpen && (
+        <div className="environment-backdrop" role="presentation" onMouseDown={() => setDebugConsoleOpen(false)}>
+          <section className="environment-dialog debug-console-dialog" role="dialog" aria-modal="true" aria-labelledby="debug-console-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="environment-dialog-heading">
+              <div>
+                <div className="eyebrow">LOCAL · THIS SESSION ONLY</div>
+                <h2 id="debug-console-title">Debug console</h2>
+                <span className="debug-console-caption">Bodies are omitted; credential-like values are redacted. Up to {MAX_DEBUG_CONSOLE_ENTRIES} recent requests are kept in memory.</span>
+              </div>
+              <div className="debug-console-actions">
+                <button className="quiet-button" disabled={!debugEntries.length} onClick={() => setDebugEntries([])}>Clear</button>
+                <button className="icon-button" title="Close debug console" aria-label="Close debug console" onClick={() => setDebugConsoleOpen(false)}><X size={17} /></button>
+              </div>
+            </div>
+            <div className="debug-console-list" aria-label="Recent request debug entries">
+              {debugEntries.length ? debugEntries.map((entry) => (
+                <article className="debug-console-entry" key={entry.id}>
+                  <div className="debug-console-entry-heading">
+                    <time>{new Date(entry.timestamp).toLocaleString()}</time>
+                    <span>{entry.source}{entry.context ? ` · ${entry.context}` : ''}</span>
+                    <strong>{entry.method}</strong>
+                    <b className={entry.error || entry.status >= 400 ? 'failed' : 'success'}>{entry.error ? 'Error' : `${entry.status} ${entry.statusText}`}</b>
+                    <span>{entry.requestName}</span>
+                  </div>
+                  <code className="debug-console-url">{entry.url}</code>
+                  <div className="debug-console-meta">
+                    <span>{entry.durationMs} ms</span>
+                    <span>{formatBytes(entry.sizeBytes)} response</span>
+                    <span>Body omitted</span>
+                    <span>Body mode: {entry.bodyMode}</span>
+                  </div>
+                  {entry.requestHeaders.length > 0 && <details>
+                    <summary>Request headers ({entry.requestHeaders.length})</summary>
+                    <div className="debug-console-headers">{entry.requestHeaders.map((header, index) => <div key={`${header.name}-${index}`}><strong>{header.name}</strong><code>{header.value}</code></div>)}</div>
+                  </details>}
+                  {entry.responseHeaders.length > 0 && <details>
+                    <summary>Response headers ({entry.responseHeaders.length})</summary>
+                    <div className="debug-console-headers">{entry.responseHeaders.map((header, index) => <div key={`${header.name}-${index}`}><strong>{header.name}</strong><code>{header.value}</code></div>)}</div>
+                  </details>}
+                  {entry.error && <div className="debug-console-error">{entry.error}</div>}
+                </article>
+              )) : <div className="debug-console-empty"><Terminal size={18} /><strong>No requests yet</strong><span>Sent requests and collection-run calls will appear here.</span></div>}
+            </div>
+          </section>
+        </div>
+      )}
       {newItemKind && <div className="environment-backdrop" role="presentation" onMouseDown={() => setNewItemKind(null)}><section className="environment-dialog create-item-dialog" role="dialog" aria-modal="true" aria-labelledby="create-item-title" onMouseDown={(event) => event.stopPropagation()}><div className="environment-dialog-heading"><div><div className="eyebrow">COLLECTIONS</div><h2 id="create-item-title">{newItemKind === 'collection' ? 'New collection' : 'New folder'}</h2></div><button className="icon-button" title="Close" aria-label="Close" onClick={() => setNewItemKind(null)}><X size={17} /></button></div><label className="environment-name-field" htmlFor="new-item-name">Name<input id="new-item-name" autoFocus value={newItemName} onChange={(event) => setNewItemName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') createNamedItem(); }} /></label><div className="create-item-actions"><button className="quiet-button" onClick={() => setNewItemKind(null)}>Cancel</button><button className="send-button" onClick={createNamedItem}>Create</button></div></section></div>}
       {environmentEditorOpen && <div className="environment-backdrop" role="presentation" onMouseDown={() => setEnvironmentEditorOpen(false)}><section className="environment-dialog" role="dialog" aria-modal="true" aria-labelledby="environment-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="environment-dialog-heading"><div><div className="eyebrow">WORKSPACE</div><h2 id="environment-dialog-title">Environments</h2></div><button className="icon-button" title="Close environments" aria-label="Close environments" onClick={() => setEnvironmentEditorOpen(false)}><X size={17} /></button></div><div className="environment-dialog-toolbar"><select aria-label="Selected environment" value={environmentName} onChange={(event) => { setEnvironmentName(event.target.value); setEnvironmentNameDraft(event.target.value); }}>{(collection.environments ?? []).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select><button className="text-button" onClick={addEnvironment}><Plus size={13} /> Add environment</button><button className="icon-button small" title="Delete environment" aria-label="Delete environment" disabled={(collection.environments?.length ?? 0) < 2} onClick={deleteCurrentEnvironment}><Trash2 size={14} /></button></div><label className="environment-name-field" htmlFor="environment-name">Environment name<input id="environment-name" value={environmentNameDraft} onChange={(event) => setEnvironmentNameDraft(event.target.value)} onBlur={() => renameEnvironment(environmentNameDraft)} /></label><div className="environment-variables"><div className="table-caption">Variables <button className="text-button" onClick={() => updateEnvironmentValues([...(selectedEnvironment?.values ?? []), { key: '', value: '', enabled: true }])}><Plus size={13} /> Add variable</button></div><KeyValueEditor entries={selectedEnvironment?.values ?? []} onChange={updateEnvironmentValues} emptyLabel="No environment variables" /></div><div className="environment-dialog-footer">Changes save automatically on this device.</div></section></div>}
     </div>

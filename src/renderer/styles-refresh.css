@@ -198,6 +198,9 @@ h2 { color: #263c40; }
 .test-result strong { color: #40585c; }
 .no-tests { color: #76888c; }
 .statusbar { color: #748589; }
+.statusbar .debug-console-trigger { color: #718689; }
+.statusbar .debug-console-trigger:hover { background: #dcebe8; color: #075f67; }
+.statusbar .debug-console-count { background: #dcebe8; color: #075f67; }
 
 .environment-backdrop { background: #142629a8; }
 .environment-dialog { border-color: #d5e0de; border-radius: 5px; background: #fbfcfa; box-shadow: 0 22px 70px #15262940; }

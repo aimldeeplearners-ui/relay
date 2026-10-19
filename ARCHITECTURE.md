@@ -1,7 +1,7 @@
 # Relay Architecture
 
 **Scope:** Current Phase 2 implementation
-**Last reviewed:** 2026-10-17
+**Last reviewed:** 2026-10-19
 
 This guide documents the implemented application structure. The broader product requirements are in [PRODUCT-SPEC.md](PRODUCT-SPEC.md); current user-visible behavior and limitations are in [FEATURES.md](FEATURES.md).
 
@@ -26,6 +26,7 @@ flowchart LR
 | Path | Responsibility |
 |---|---|
 | `src/main/index.ts` | Creates the window; executes HTTP requests; substitutes variables; builds bodies and auth headers; runs response assertions; validates imports; protects stored credentials with Electron `safeStorage`; reads and writes workspace files; opens native file dialogs. |
+| `src/main/diagnosticLogger.ts` | Writes allowlisted app diagnostic events to a size-limited, rotating JSON-lines file under Electron's per-user data directory. It excludes request/response bodies, credentials, URLs, and file paths. |
 | `src/main/openApiImport.ts` | Validates Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML definitions through one import action, restricts references to local files beside the selected definition, and converts supported operations into Relay collections. |
 | `src/preload/index.ts` | Exposes the typed `window.relay` API through `contextBridge`; the renderer gets no direct Node.js or filesystem access. |
 | `src/renderer/App.tsx` | Owns the React UI and in-memory view state: workspace tree, collection/folder/request selection, request tabs, environment editor, request builder, response viewer, history, import/export actions. |
@@ -57,6 +58,7 @@ The schema is the data contract, while the shared TypeScript types provide compi
 4. The preload invokes `api:execute`; the main process interpolates `{{variable}}` values, appends enabled query parameters, builds headers/auth/body, and calls Electron's `net.fetch`.
 5. The main process buffers the response, records duration and body size, then evaluates configured assertions.
 6. The response and assertion results return over IPC and render in the response tabs. Individual-send history snapshots include the request, environment, and bounded response in renderer memory for the current session. Selecting an entry displays its previous response; a separate action loads its request into a temporary builder draft. Neither history nor replay drafts are written to the workspace.
+7. The renderer adds a sanitized Debug Console entry for individual sends and each collection-run call. Entries contain request/response metadata only; bodies are omitted, known credential values are redacted, and up to 500 entries remain in memory for the current session. They are not written to disk or exported.
 
 Collection runs use `collectRunnableRequests` to create a depth-first target list for the selected collection/folder or whole workspace. Before execution, readiness checks block missing/blank environment values and invalid URLs, and ask users to review write methods or requests without response checks. Requests with named data cases execute once per case in sequence; case variables override saved-environment and earlier run-variable values for that request only. Multi-case requests cannot also extract values for downstream requests, avoiding ambiguous dependencies. The renderer awaits each `api:execute` IPC call sequentially, applies stop-on-failure/manual-stop behavior, and builds a `CollectionRunReport`. Opted-in offset pagination updates the configured limit/offset parameters for each page, uses a JSON Pointer to count the response array, and records each page separately. A full page at the maximum is reported as potentially incomplete. After each response, JSON Pointer extraction rules can add named values to a temporary run-variable map overlaid on the selected environment for later requests. Extracted values do not change saved environments. Reports include request names, methods, status, duration, response size, assertions, and extraction outcomes, but omit response bodies, headers, and extracted values. `report:export` writes sanitized JSON, Excel-compatible CSV, or standalone HTML through a native Save dialog.
 
@@ -106,10 +108,16 @@ Export snapshots the latest active-request edits and opens a native Save dialog.
 - Export creates a copy and does not change the autosave path. Choosing the current autosave file itself is rejected.
 - Export redacts protected values by default. The user must confirm before creating a plaintext export that includes secrets.
 
+## Diagnostic Logs
+
+The main process writes `userData/logs/relay-diagnostics.log` plus up to three rotated backups. Each file is capped at 1 MiB. Events cover startup, renderer failures, request execution failures (method and safe error type/code only), and collection/report storage operations. A narrow preload call reports renderer error names only. **View → Open Diagnostic Logs** uses Electron `shell.openPath`; opening the folder is not logged. Log files remain local and are not included in workspace exports. These logs are for troubleshooting, not auditing.
+
 ## UI State and Current Limits
 
 - Request tabs are session-only; closing a tab closes the view but does not delete the saved request. Tabs are not restored on next launch.
 - The active workspace, collections, folders, requests, and environments persist together; request history responses and replay drafts remain in renderer memory only. History stores at most 12 individual-send entries and caps each response body at 256 KiB; it is not persisted or exported because response bodies may contain sensitive data.
+- Debug Console entries are also renderer-memory-only; they are bounded to 500, body-free, and not included in workspace files or exports. This is a troubleshooting view, not an audit trail.
+- Diagnostic files are separate from the Debug Console session list; the console's **Clear** button does not delete diagnostic files.
 - Only one workspace is supported. Multiple collections are supported within it.
 - Collections and folders can be created. Requests can be created, renamed, and deleted; folders and collections can be deleted with confirmation. Moving/reordering items and renaming containers are not implemented.
 - Collection runner, run readiness, run-scoped JSON Pointer extraction, bounded offset pagination, and sanitized JSON/CSV/HTML report export are implemented. Extraction and pagination work only during collection runs; individual requests use only the selected saved environment and send once.

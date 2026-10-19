@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import Ajv from 'ajv';
@@ -7,6 +9,8 @@ import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnable
 import { partitionCollectionSecrets, redactCollectionSecrets, removeFormDataFileSelections, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
 import { buildCurlCommand } from '../src/shared/curlCommand.ts';
 import { buildMultipartFormData } from '../src/shared/formData.ts';
+import { createDebugConsoleEntry } from '../src/shared/debugConsole.ts';
+import { createDiagnosticLogRecord, DIAGNOSTIC_LOG_FILE_NAME, getDiagnosticErrorDetails, MAX_DIAGNOSTIC_LOG_BYTES, writeDiagnosticLog } from '../src/main/diagnosticLogger.ts';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared/responseExtraction.ts';
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../src/shared/responseAssertions.ts';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../src/shared/oauth2PasswordGrant.ts';
@@ -529,6 +533,78 @@ test('run readiness blocks enabled file fields without a current-session selecti
   }], {});
 
   assert.ok(readiness.blockers.some((issue) => /form-data file field/.test(issue.message)));
+});
+
+test('debug console entries redact credentials and omit request and response bodies', () => {
+  const entry = createDebugConsoleEntry({
+    source: 'Send',
+    requestName: 'Upload sample',
+    request: {
+      method: 'POST',
+      url: 'https://api.example.test/upload?access_token={{token}}&page=2',
+      headers: [{ key: 'Authorization', value: 'Bearer {{token}}' }, { key: 'X-Trace-Context', value: '{{sessionToken}}' }, { key: 'X-Transaction', value: '{{opaqueKey}}' }, { key: 'Accept', value: 'application/json' }],
+      body: { mode: 'json', raw: '{"private":"request-body-secret"}' },
+    },
+    environment: { token: 'request-token-secret', privateToken: 'path-token-secret', sessionToken: 'header-token-secret', opaqueKey: 'opaque-value-secret' },
+    response: {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/json', 'set-cookie': 'session=response-cookie-secret', 'x-echo': 'opaque-value-secret' },
+      body: '{"private":"response-body-secret"}',
+      durationMs: 23,
+      sizeBytes: 35,
+      tests: [],
+    },
+    sensitiveValues: ['opaque-value-secret'],
+    timestamp: '2026-10-19T12:00:00.000Z',
+  });
+  const serialized = JSON.stringify(entry);
+
+  assert.match(entry.url, /access_token=%5BREDACTED%5D/);
+  assert.equal(entry.requestHeaders[0].value, '[REDACTED]');
+  assert.equal(entry.requestHeaders[1].value, '[REDACTED]');
+  assert.equal(entry.requestHeaders[2].value, '[REDACTED]');
+  assert.equal(entry.responseHeaders.find((header) => header.name === 'set-cookie').value, '[REDACTED]');
+  assert.equal(entry.responseHeaders.find((header) => header.name === 'x-echo').value, '[REDACTED]');
+  assert.ok(entry.responseHeaders.some((header) => header.name === 'content-type' && header.value === 'application/json'));
+  assert.equal(serialized.includes('request-token-secret'), false);
+  assert.equal(serialized.includes('path-token-secret'), false);
+  assert.equal(serialized.includes('header-token-secret'), false);
+  assert.equal(serialized.includes('opaque-value-secret'), false);
+  assert.equal(serialized.includes('request-body-secret'), false);
+  assert.equal(serialized.includes('response-body-secret'), false);
+});
+
+test('diagnostic logs allowlist metadata, rotate at the size cap, and never store arbitrary values', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'relay-diagnostics-'));
+  try {
+    const record = createDiagnosticLogRecord('error', 'collection.save_failed', {
+      operation: 'collection.save',
+      errorName: 'Error',
+      errorCode: 'EACCES',
+      message: 'Bearer highly-sensitive-token',
+      url: 'https://private.example.test/?token=do-not-log',
+      path: 'C:\\private\\file.bin',
+    }, '2026-10-19T12:00:00.000Z');
+    assert.deepEqual(record.details, { operation: 'collection.save', errorName: 'Error', errorCode: 'EACCES' });
+    assert.deepEqual(getDiagnosticErrorDetails(Object.assign(new Error('secret'), { code: 'EACCES' })), { errorName: 'Error', errorCode: 'EACCES' });
+
+    const filePath = join(directory, DIAGNOSTIC_LOG_FILE_NAME);
+    writeDiagnosticLog(directory, 'info', 'app.started', { version: '0.1.0', platform: 'win32' }, '2026-10-19T12:00:00.000Z');
+    let content = readFileSync(filePath, 'utf8');
+    assert.ok(content.includes('app.started'));
+    assert.equal(content.includes('highly-sensitive-token'), false);
+    assert.equal(content.includes('private.example.test'), false);
+    assert.equal(content.includes('file.bin'), false);
+
+    writeFileSync(filePath, 'x'.repeat(MAX_DIAGNOSTIC_LOG_BYTES));
+    writeDiagnosticLog(directory, 'error', 'main.start_failed', { errorName: 'Error' }, '2026-10-19T12:01:00.000Z');
+    assert.ok(statSync(`${filePath}.1`).size <= MAX_DIAGNOSTIC_LOG_BYTES);
+    content = readFileSync(filePath, 'utf8');
+    assert.ok(content.includes('main.start_failed'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('run readiness blocks missing variables and reports each variable without exposing its value', () => {

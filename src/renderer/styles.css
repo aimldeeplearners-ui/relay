@@ -147,6 +147,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebar-bottom div:last-child { display: flex; flex-direction: column; gap: 3px; }
 .sidebar-bottom strong { font-size: 10px; color: #58645b; font-weight: 650; }
 .sidebar-bottom span { color: #929b94; font-size: 9px; }
+.debug-console-trigger { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 3px 7px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 10px; cursor: pointer; }
+.debug-console-trigger:hover { background: var(--green-wash); color: var(--green-dark); }
+.debug-console-count { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border-radius: 8px; background: var(--green-wash); color: var(--green-dark); font-size: 9px; }
 .main-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0 27px; overflow: auto; }
 .breadcrumb { display: flex; align-items: center; gap: 8px; height: 43px; flex-shrink: 0; color: #929b94; font-size: 10px; border-bottom: 1px solid #e6eae5; }
 .breadcrumb strong { color: #536057; font-weight: 600; }
@@ -273,6 +276,29 @@ h2 { margin: 0; color: #344038; font-size: 12px; font-weight: 700; }
 .response-header-list { padding: 8px 15px; }.response-header { display: grid; grid-template-columns: minmax(140px, .7fr) minmax(200px, 1.5fr); gap: 14px; padding: 8px 2px; border-bottom: 1px solid #edf0ec; font-size: 9px; }.response-header span { color: #748077; }.response-header code { color: #3c5144; font-family: Consolas, "SFMono-Regular", monospace; overflow-wrap: anywhere; }
 .test-results { padding: 8px 15px; }.test-result { display: flex; align-items: flex-start; gap: 9px; padding: 9px 2px; border-bottom: 1px solid #edf0ec; }.test-icon { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; }.test-icon.passed { background: #e7f3eb; color: #3c865d; }.test-icon.failed { background: #faece9; color: #c1594a; }.test-result div { display: flex; flex-direction: column; gap: 3px; }.test-result strong { color: #4d5c51; font-size: 10px; font-weight: 600; }.test-result div span { color: #929c94; font-size: 9px; }.no-tests { display: flex; align-items: center; gap: 8px; padding: 15px 2px; color: #8f9991; font-size: 10px; }
 .statusbar { display: flex; align-items: center; gap: 18px; height: 27px; flex-shrink: 0; color: #8b958d; font-size: 9px; }.statusbar span:first-child { display: flex; align-items: center; gap: 6px; }
+.debug-console-dialog { display: flex; width: min(980px, 96vw); max-height: 88vh; flex-direction: column; }
+.debug-console-dialog .environment-dialog-heading { flex: 0 0 auto; }
+.debug-console-caption { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
+.debug-console-actions { display: flex; align-items: center; gap: 8px; }
+.debug-console-notice { margin: -8px 0 10px; color: var(--muted); font-size: 10px; }
+.debug-console-list { display: grid; min-height: 180px; overflow: auto; align-content: start; border-top: 1px solid var(--line); }
+.debug-console-entry { display: grid; gap: 7px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.debug-console-entry-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
+.debug-console-entry-heading strong { color: var(--ink); font-size: 10px; }
+.debug-console-entry-heading b { font-size: 10px; }
+.debug-console-entry-heading b.success { color: var(--green-dark); }
+.debug-console-entry-heading b.failed { color: #a43f36; }
+.debug-console-url { overflow-wrap: anywhere; color: var(--ink); font-family: Consolas, monospace; font-size: 10px; }
+.debug-console-meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 9px; }
+.debug-console-entry details { color: var(--muted); font-size: 10px; }
+.debug-console-entry summary { width: fit-content; cursor: pointer; }
+.debug-console-headers { display: grid; gap: 4px; margin-top: 7px; }
+.debug-console-headers > div { display: grid; grid-template-columns: minmax(120px, 220px) minmax(0, 1fr); gap: 10px; }
+.debug-console-headers strong { color: var(--ink); font-weight: 600; }
+.debug-console-headers code { overflow-wrap: anywhere; color: var(--muted); }
+.debug-console-error { overflow-wrap: anywhere; color: #a43f36; font-size: 10px; }
+.debug-console-empty { display: grid; min-height: 200px; place-content: center; justify-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
+.debug-console-empty strong { color: var(--ink); font-size: 12px; }
 
 @media (max-width: 1000px) {
   .app-shell { grid-template-columns: 208px minmax(0, 1fr); }

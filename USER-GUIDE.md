@@ -80,6 +80,12 @@ The run report lists status, duration, response size, assertions, and extraction
 
 Requests sent with **Send** appear in **HISTORY** in the sidebar. Select an entry to inspect its previous response in the response pane; this does not send another request. Use **Load request** beside it to load its request and environment snapshot into an unsaved builder draft. Relay marks it **HISTORY REPLAY · NOT SAVED**. Click **Send** to issue it again; the draft will not overwrite the saved request. History stores up to 12 entries (the sidebar displays five), stays in memory for the current session, and clears when Relay closes. Each response body is capped at 256 KiB; the viewer notes when a body is truncated. Responses may contain sensitive data, so history is not persisted or exported. Collection-run requests are not added to history.
 
+## Debug Console
+
+Click **Debug console** in the status bar to inspect recent individual sends and collection-run requests. Entries include the request time, source, method, sanitized URL, headers, status, duration, response size, and errors. Known credential values are redacted, and request/response bodies are omitted. Entries stay in memory for this session, up to 500; **Clear** removes this list only. This view is for troubleshooting, not auditing.
+
+To troubleshoot Relay itself, choose **View → Open Diagnostic Logs** from the desktop app menu. Relay writes `relay-diagnostics.log` under its per-user data directory in `logs/`; it rotates the file at 1 MiB and keeps three backups. These files contain allowlisted app/error metadata, not API bodies, credentials, URLs, or file paths. They are separate from the Debug Console entries, and opening the folder is not logged.
+
 ## 7. Use Offset Pagination
 
 On Relay-format import, Relay infers pagination for a request with exactly one enabled numeric `limit` and `offset` query parameter. It preserves any explicit pagination configuration, uses those parameter values for page size and starting offset, and sets the maximum to 10 pages. You must provide the response-array JSON Pointer in the request's **Params** tab because response shapes differ between APIs.
