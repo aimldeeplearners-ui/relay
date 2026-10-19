@@ -142,7 +142,7 @@
             "secret": { "type": "boolean" },
             "raw": { "type": "string" },
             "urlencoded": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } },
-            "formdata": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } }
+            "formdata": { "type": "array", "items": { "$ref": "#/definitions/FormDataEntry" } }
           }
         },
         "assertions": {
@@ -190,6 +190,21 @@
         }
       },
       "required": ["method", "url"]
+    },
+    "FormDataEntry": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "secret": { "type": "boolean" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["text", "file"] },
+        "fileToken": { "type": "string" },
+        "fileName": { "type": "string" }
+      },
+      "required": ["key", "value"],
+      "additionalProperties": false
     },
     "KeyValue": {
       "type": "object",

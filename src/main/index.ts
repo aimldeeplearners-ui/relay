@@ -1,17 +1,18 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, net, safeStorage, type OpenDialogOptions } from 'electron';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, extname, isAbsolute, join, resolve } from 'node:path';
+import { readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 import collectionSchema from '../../spec/rest-soap-spec.json';
-import { partitionCollectionSecrets, redactCollectionSecrets, restoreCollectionSecrets } from '../shared/credentialProtection';
+import { partitionCollectionSecrets, redactCollectionSecrets, removeFormDataFileSelections, restoreCollectionSecrets } from '../shared/credentialProtection';
 import type { ApiRequestInput, ApiResponse, AssertionResult, CollectionDocument, CollectionImportResult, CollectionRunReport, KeyValue, RunReportFormat } from '../shared/api';
 import { serializeRunReportCsv, serializeRunReportHtml } from '../shared/runReportFormats';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../shared/oauth2PasswordGrant';
 import { buildCurlCommand } from '../shared/curlCommand';
+import { buildMultipartFormData, MAX_FORM_DATA_FILE_BYTES, type SelectedFormDataFile } from '../shared/formData';
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../shared/responseAssertions';
 import { importOpenApiFile } from './openApiImport';
 
@@ -20,6 +21,7 @@ const validateCollection = new Ajv({ allErrors: true }).compile(collectionSchema
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const protectedCollectionFormat = 'relay-protected-collection';
 const oauthTokenCache = new Map<string, { accessToken: string; expiresAt: number }>();
+const selectedFormDataFiles = new Map<string, { filePath: string; fileName: string }>();
 
 interface ProtectedCollectionFile {
   format: typeof protectedCollectionFormat;
@@ -164,7 +166,7 @@ function enabledEntries(entries: KeyValue[] | undefined, environment: Record<str
     .map((entry) => [interpolate(entry.key, environment), interpolate(entry.value, environment)]);
 }
 
-function buildBody(input: ApiRequestInput): { body?: BodyInit; contentType?: string } {
+async function buildBody(input: ApiRequestInput): Promise<{ body?: BodyInit; contentType?: string }> {
   const body = input.request.body;
   if (!body || body.mode === 'none') return {};
 
@@ -175,9 +177,19 @@ function buildBody(input: ApiRequestInput): { body?: BodyInit; contentType?: str
   }
 
   if (body.mode === 'formdata') {
-    const formData = new FormData();
-    for (const [key, value] of enabledEntries(body.formdata, input.environment)) formData.append(key, value);
-    return { body: formData };
+    const files = new Map<string, SelectedFormDataFile>();
+    for (const entry of body.formdata ?? []) {
+      if (entry.enabled === false || !entry.key.trim() || entry.type !== 'file') continue;
+      const selectedFile = entry.fileToken ? selectedFormDataFiles.get(entry.fileToken) : undefined;
+      if (!selectedFile) throw new Error('Choose the form-data file again before sending. File selections last only for this Relay session.');
+      const fileInfo = await stat(selectedFile.filePath);
+      if (!fileInfo.isFile()) throw new Error('The selected form-data file is no longer available. Choose it again.');
+      if (fileInfo.size > MAX_FORM_DATA_FILE_BYTES) throw new Error('Form-data files must be 50 MiB or smaller.');
+      const fileBytes = new Uint8Array(await readFile(selectedFile.filePath));
+      const blob = new Blob([fileBytes.buffer as ArrayBuffer], { type: 'application/octet-stream' });
+      files.set(entry.fileToken as string, { blob, fileName: selectedFile.fileName });
+    }
+    return { body: buildMultipartFormData(body.formdata ?? [], input.environment, files) };
   }
 
   const raw = interpolate(body.raw ?? '', input.environment);
@@ -276,7 +288,8 @@ async function executeRequest(input: ApiRequestInput): Promise<ApiResponse> {
       else headers.set(key, value);
     }
 
-    const requestBody = buildBody(input);
+    const requestBody = await buildBody(input);
+    if (input.request.body?.mode === 'formdata') headers.delete('content-type');
     if (requestBody.contentType && !headers.has('content-type')) headers.set('content-type', requestBody.contentType);
     if (input.request.body?.mode === 'xml') headers.set('content-type', 'text/xml; charset=utf-8');
 
@@ -314,6 +327,31 @@ async function executeRequest(input: ApiRequestInput): Promise<ApiResponse> {
   }
 }
 
+ipcMain.handle('formdata:choose-file', async (event) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const options: OpenDialogOptions = {
+    title: 'Choose a form-data file',
+    properties: ['openFile'],
+  };
+  const selection = owner
+    ? await dialog.showOpenDialog(owner, options)
+    : await dialog.showOpenDialog(options);
+  if (selection.canceled || !selection.filePaths[0]) return { canceled: true };
+
+  try {
+    const filePath = selection.filePaths[0];
+    const fileInfo = await stat(filePath);
+    if (!fileInfo.isFile()) return { error: 'Choose a file, not a folder.' };
+    if (fileInfo.size > MAX_FORM_DATA_FILE_BYTES) return { error: 'Form-data files must be 50 MiB or smaller.' };
+    const fileToken = randomUUID();
+    const fileName = basename(filePath);
+    selectedFormDataFiles.set(fileToken, { filePath, fileName });
+    return { fileToken, fileName };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Unable to read the selected file.' };
+  }
+});
+
 ipcMain.handle('api:execute', (_event, input: ApiRequestInput) => executeRequest(input));
 ipcMain.handle('request:copy-curl', async (event, input: ApiRequestInput) => {
   const owner = BrowserWindow.fromWebContents(event.sender);
@@ -335,7 +373,8 @@ ipcMain.handle('request:copy-curl', async (event, input: ApiRequestInput) => {
   try {
     const oauth2 = input.request.auth?.type === 'oauth2' ? input.request.auth.oauth2 : undefined;
     const accessToken = oauth2 ? await getPasswordGrantAccessToken(oauth2, input.environment) : undefined;
-    clipboard.writeText(buildCurlCommand(input, accessToken));
+    const formDataFiles = new Map([...selectedFormDataFiles].map(([fileToken, file]) => [fileToken, { filePath: file.filePath }]));
+    clipboard.writeText(buildCurlCommand(input, accessToken, formDataFiles));
     return { copied: true };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Unable to create the cURL command' };
@@ -435,7 +474,8 @@ ipcMain.handle('collection:export', async (event, collection: CollectionDocument
       : resolvedExportPath === resolvedCurrentPath;
     if (isSamePath) return { error: 'Choose a different file from the active autosave collection to export a copy.' };
 
-    await writeJsonAtomically(exportPath, includeSecrets ? collection : redactCollectionSecrets(collection));
+    const exportCollection = includeSecrets ? removeFormDataFileSelections(collection) : redactCollectionSecrets(collection);
+    await writeJsonAtomically(exportPath, exportCollection);
     return { exported: true, path: exportPath };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Unable to export the collection' };

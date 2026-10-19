@@ -8,6 +8,19 @@ export interface KeyValue {
   description?: string;
 }
 
+export interface FormDataEntry extends KeyValue {
+  type?: 'text' | 'file';
+  fileToken?: string;
+  fileName?: string;
+}
+
+export interface FormDataFileSelectionResult {
+  canceled?: boolean;
+  fileToken?: string;
+  fileName?: string;
+  error?: string;
+}
+
 export interface CollectionItem {
   name: string;
   type?: 'collection' | 'folder';
@@ -109,7 +122,7 @@ export interface RequestDefinition {
     secret?: boolean;
     raw?: string;
     urlencoded?: KeyValue[];
-    formdata?: KeyValue[];
+    formdata?: FormDataEntry[];
   };
   assertions?: {
     expectedStatusCode?: number;
@@ -181,6 +194,7 @@ export interface ApiResponse {
 
 export interface RelayApi {
   executeRequest(input: ApiRequestInput): Promise<ApiResponse>;
+  chooseFormDataFile(): Promise<FormDataFileSelectionResult>;
   importCollection(): Promise<CollectionImportResult>;
   importOpenApiDefinition(): Promise<CollectionImportResult>;
   loadCollection(): Promise<CollectionLoadResult>;

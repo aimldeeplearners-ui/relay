@@ -8,6 +8,23 @@ export interface ProtectedCollectionParts {
   secrets: Record<string, string>;
 }
 
+function stripFormDataFileSelections(items: CollectionItem[]): void {
+  for (const item of items) {
+    const entries = item.request?.body?.formdata ?? [];
+    for (const entry of entries) {
+      delete entry.fileToken;
+      delete entry.fileName;
+    }
+    if (item.items) stripFormDataFileSelections(item.items);
+  }
+}
+
+export function removeFormDataFileSelections(collection: CollectionDocument): CollectionDocument {
+  const copy = structuredClone(collection);
+  stripFormDataFileSelections(copy.items);
+  return copy;
+}
+
 export function isSensitiveCredentialKey(key: string): boolean {
   return sensitiveKeyPattern.test(key);
 }
@@ -64,7 +81,7 @@ function protectItems(items: CollectionItem[], parentPath: string, secrets: Reco
 }
 
 export function partitionCollectionSecrets(collection: CollectionDocument): ProtectedCollectionParts {
-  const protectedCollection = structuredClone(collection);
+  const protectedCollection = removeFormDataFileSelections(collection);
   const secrets: Record<string, string> = {};
 
   for (const [environmentIndex, environment] of (protectedCollection.environments ?? []).entries()) {

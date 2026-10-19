@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import {
-  Activity, AlertCircle, Check, ChevronDown, ChevronRight, Clock3, Cloud,
+  Activity, AlertCircle, Check, ChevronDown, ChevronRight, Clock3, Cloud, FileUp,
   Code2, Copy, Download, Ellipsis, Eye, EyeOff, FileCode2, Folder, FolderOpen, Globe2, History,
   FilePlus2, FolderInput, FolderPlus, HardDrive, KeyRound, Layers3, Play, Plus, Search, Send, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
   Square,
   RotateCcw, Trash2, X,
 } from 'lucide-react';
-import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, RequestTestCase, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
+import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, FormDataEntry, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, RequestTestCase, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
 import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
 import { isSensitiveCredentialKey } from '../shared/credentialProtection';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../shared/responseExtraction';
@@ -1117,7 +1117,7 @@ function App(): JSX.Element {
             {requestTab === 'Body' && <div className="body-editor">
               <div className="body-toolbar"><div className="body-modes">{(['none', 'json', 'xml', 'raw', 'urlencoded', 'formdata'] as const).map((mode) => <button key={mode} className={request.body?.mode === mode ? 'mode active' : 'mode'} onClick={() => updateRequest((current) => ({ ...current, body: { ...(current.body ?? { mode: 'none' }), mode } }))}>{mode === 'json' ? 'JSON' : mode === 'xml' ? 'XML' : mode === 'raw' ? 'Raw' : mode === 'urlencoded' ? 'URL encoded' : mode === 'formdata' ? 'Form-data' : 'None'}</button>)}</div>{request.body?.mode === 'json' || request.body?.mode === 'xml' || request.body?.mode === 'raw' ? <label className="body-secret-toggle" title="Encrypt the complete raw body at rest"><input type="checkbox" checked={request.body?.secret === true} onChange={(event) => updateRequest((current) => ({ ...current, body: { ...(current.body ?? { mode: 'none' }), secret: event.target.checked } }))} /> Protect at rest</label> : null}<span><Code2 size={13} /> {request.body?.mode === 'json' ? 'application/json' : request.body?.mode === 'xml' ? 'text/xml' : request.body?.mode === 'urlencoded' ? 'application/x-www-form-urlencoded' : request.body?.mode === 'formdata' ? 'multipart/form-data' : 'Text'}</span></div>
               {(request.body?.mode === 'urlencoded' || request.body?.mode === 'formdata')
-                ? <StructuredBodyEditor body={request.body} onChange={(mode, entries) => updateRequest((current) => ({ ...current, body: { ...(current.body ?? { mode }), [mode]: entries } }))} />
+                ? <StructuredBodyEditor body={request.body} onChange={(body) => updateRequest((current) => ({ ...current, body }))} />
                 : <textarea className="code-editor" aria-label="Request body" value={request.body?.raw ?? ''} onChange={(event) => updateRequest((current) => ({ ...current, body: { ...(current.body ?? { mode: 'none' }), raw: event.target.value } }))} spellCheck={false} placeholder="Enter request payload…" disabled={request.body?.mode === 'none'} />}
             </div>}
             {requestTab === 'Tests' && <div className="tests-editor">
@@ -1233,17 +1233,72 @@ function StructuredBodyEditor({
   onChange,
 }: {
   body: NonNullable<RequestDefinition['body']>;
-  onChange: (mode: 'urlencoded' | 'formdata', entries: KeyValue[]) => void;
+  onChange: (body: NonNullable<RequestDefinition['body']>) => void;
 }): JSX.Element {
   const mode = body.mode === 'formdata' ? 'formdata' : 'urlencoded';
-  const entries = body[mode] ?? [];
-  const label = mode === 'urlencoded' ? 'URL-encoded fields' : 'Form-data fields';
 
   return <div className="config-table body-fields">
-    <div className="table-caption">{label}<button className="text-button" onClick={() => onChange(mode, [...entries, { key: '', value: '', enabled: true }])}><Plus size={13} /> Add field</button></div>
-    <KeyValueEditor entries={entries} onChange={(nextEntries) => onChange(mode, nextEntries)} emptyLabel={`No ${mode === 'urlencoded' ? 'URL-encoded' : 'form-data'} fields`} />
-    {mode === 'formdata' && <div className="body-mode-note">Text fields are supported; file uploads are not available yet.</div>}
+    <div className="table-caption">{mode === 'urlencoded' ? 'URL-encoded fields' : 'Form-data fields'}<button className="text-button" onClick={() => mode === 'formdata'
+      ? onChange({ ...body, formdata: [...(body.formdata ?? []), { key: '', value: '', type: 'text', enabled: true }] })
+      : onChange({ ...body, urlencoded: [...(body.urlencoded ?? []), { key: '', value: '', enabled: true }] })}><Plus size={13} /> Add field</button></div>
+    {mode === 'formdata'
+      ? <FormDataEditor entries={body.formdata ?? []} onChange={(formdata) => onChange({ ...body, formdata })} />
+      : <KeyValueEditor entries={body.urlencoded ?? []} onChange={(urlencoded) => onChange({ ...body, urlencoded })} emptyLabel="No URL-encoded fields" />}
+    {mode === 'formdata' && <div className="body-mode-note">Choose a local file for each file field. Files are limited to 50 MiB and must be selected again after restarting Relay; file contents and selections are not saved or exported.</div>}
   </div>;
+}
+
+function FormDataEditor({ entries, onChange }: {
+  entries: FormDataEntry[];
+  onChange: (entries: FormDataEntry[]) => void;
+}): JSX.Element {
+  const [revealedRows, setRevealedRows] = useState<Set<number>>(() => new Set());
+  const [selectionError, setSelectionError] = useState('');
+
+  async function chooseFile(index: number): Promise<void> {
+    setSelectionError('');
+    try {
+      const result = await window.relay.chooseFormDataFile();
+      if (result.canceled) return;
+      if (result.error || !result.fileToken || !result.fileName) {
+        setSelectionError(result.error ?? 'Unable to select a file.');
+        return;
+      }
+      onChange(entries.map((entry, entryIndex) => entryIndex === index
+        ? { ...entry, type: 'file', value: '', secret: false, fileToken: result.fileToken, fileName: result.fileName }
+        : entry));
+    } catch (error) {
+      setSelectionError(error instanceof Error ? error.message : 'Unable to select a file.');
+    }
+  }
+
+  function updateEntry(index: number, changes: Partial<FormDataEntry>): void {
+    onChange(entries.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...changes } : entry));
+  }
+
+  return <>
+    <div className="kv-head formdata-head"><span title="Enabled" /><span>SECRET</span><span>TYPE</span><span>KEY</span><span>VALUE</span><span /></div>
+    {entries.length ? entries.map((entry, index) => {
+      const isFile = entry.type === 'file';
+      const detectedSecret = isSensitiveCredentialKey(entry.key);
+      const isSecret = !isFile && (entry.secret === true || detectedSecret);
+      const isRevealed = revealedRows.has(index);
+      return <div className="kv-row formdata-row" key={index}>
+        <input type="checkbox" checked={entry.enabled !== false} aria-label={`Enable ${entry.key || 'form-data field'}`} onChange={(event) => updateEntry(index, { enabled: event.target.checked })} />
+        <input type="checkbox" checked={isSecret} disabled={isFile || detectedSecret} title={detectedSecret ? 'Sensitive key names are always protected' : isFile ? 'File selections are session-only' : 'Encrypt this value at rest'} aria-label={`Protect ${entry.key || 'form-data value'} at rest`} onChange={(event) => updateEntry(index, { secret: event.target.checked })} />
+        <select aria-label={`Form-data field ${index + 1} type`} value={isFile ? 'file' : 'text'} onChange={(event) => {
+          const type = event.target.value as 'text' | 'file';
+          updateEntry(index, { type, value: '', secret: false, fileToken: undefined, fileName: undefined });
+        }}><option value="text">Text</option><option value="file">File</option></select>
+        <input value={entry.key} aria-label="Key" placeholder="Key" onChange={(event) => updateEntry(index, { key: event.target.value })} />
+        {isFile
+          ? <div className="formdata-file-value"><span title={entry.fileName ?? 'No file selected'}>{entry.fileToken ? entry.fileName : 'No file selected'}</span><button className="text-button" onClick={() => void chooseFile(index)}><FileUp size={13} />{entry.fileToken ? 'Change' : 'Choose file'}</button></div>
+          : <div className="kv-value"><input type={isSecret && !isRevealed ? 'password' : 'text'} value={entry.value} aria-label="Value" placeholder="Value" onChange={(event) => updateEntry(index, { value: event.target.value })} />{isSecret && <button className="secret-reveal" title={isRevealed ? 'Hide value' : 'Reveal value'} aria-label={isRevealed ? 'Hide secret value' : 'Reveal secret value'} onClick={() => setRevealedRows((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; })}>{isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}</button>}</div>}
+        <button className="row-remove" title="Remove" aria-label={`Remove form-data field ${entry.key || index + 1}`} onClick={() => onChange(entries.filter((_, entryIndex) => entryIndex !== index))}><X size={14} /></button>
+      </div>;
+    }) : <div className="empty-table">No form-data fields</div>}
+    {selectionError && <div className="assertion-editor-error" role="alert">{selectionError}</div>}
+  </>;
 }
 
 function ResponseExtractionEditor({ rules, onChange }: { rules: NonNullable<RequestDefinition['extractVariables']>; onChange: (rules: NonNullable<RequestDefinition['extractVariables']>) => void }): JSX.Element {

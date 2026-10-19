@@ -1,4 +1,8 @@
-import type { ApiRequestInput, KeyValue } from './api';
+import type { ApiRequestInput, FormDataEntry, KeyValue } from './api';
+
+export interface CurlFormDataFile {
+  filePath: string;
+}
 
 const variablePattern = /\{\{\s*([^{}]+?)\s*\}\}/g;
 
@@ -22,7 +26,11 @@ function setHeader(headers: Map<string, { name: string; value: string }>, name: 
   headers.set(name.toLowerCase(), { name, value });
 }
 
-export function buildCurlCommand(input: ApiRequestInput, oauth2AccessToken?: string): string {
+export function buildCurlCommand(
+  input: ApiRequestInput,
+  oauth2AccessToken?: string,
+  selectedFiles: ReadonlyMap<string, CurlFormDataFile> = new Map(),
+): string {
   const { request, environment } = input;
   const url = new URL(interpolate(request.url, environment));
   for (const [key, value] of enabledEntries(request.queryParams, environment)) url.searchParams.append(key, value);
@@ -72,8 +80,16 @@ export function buildCurlCommand(input: ApiRequestInput, oauth2AccessToken?: str
 
   if (!['GET', 'HEAD'].includes(request.method)) {
     if (bodyMode === 'formdata') {
-      for (const [key, value] of enabledEntries(body?.formdata, environment)) {
-        command.push('--form-string', quotePowerShell(`${key}=${value}`));
+      for (const entry of (body?.formdata ?? []) as FormDataEntry[]) {
+        if (entry.enabled === false || !entry.key.trim()) continue;
+        const key = interpolate(entry.key, environment);
+        if (entry.type === 'file') {
+          const selectedFile = entry.fileToken ? selectedFiles.get(entry.fileToken) : undefined;
+          if (!selectedFile) throw new Error('Choose a file for each enabled form-data file field before creating a cURL command.');
+          command.push('--form', quotePowerShell(`${key}=@${selectedFile.filePath}`));
+        } else {
+          command.push('--form-string', quotePowerShell(`${key}=${interpolate(entry.value, environment)}`));
+        }
       }
     } else if (bodyMode === 'urlencoded') {
       const parameters = new URLSearchParams();

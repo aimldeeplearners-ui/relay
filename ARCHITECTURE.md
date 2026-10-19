@@ -64,7 +64,7 @@ Execution details:
 
 - Supported HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
 - Auth implemented: none, Bearer, Basic, API key in header or query, and per-request OAuth2 password grant. OAuth2 tokens are fetched through the main-process network service and cached in memory until near expiry; client secret, username, and password use `safeStorage` at rest. Authorization-code, client-credentials, device-code, and refresh-token flows are not supported.
-- Body modes: none, JSON, XML, raw, URL-encoded, and text-only form-data. File upload is not supported.
+- Body modes: none, JSON, XML, raw, URL-encoded, and multipart form-data with text or selected file parts. The main process reads files authorized by its native dialog; session selection tokens, filenames, and file contents are not persisted. Files are limited to 50 MiB each. Standalone binary bodies are not supported.
 - JSON requests default to `application/json`; XML requests force `text/xml; charset=utf-8`; URL-encoded and form-data bodies use their respective encodings. Raw bodies use a user-specified content type when needed.
 - SOAP uses the same HTTP dispatcher with a raw XML envelope and a user-specified `SOAPAction` header where required. There is no WSDL parser or SOAP wizard.
 - The request timeout is 30 seconds. Network and invalid URL errors return structured failures.
@@ -113,7 +113,7 @@ Export snapshots the latest active-request edits and opens a native Save dialog.
 - Only one workspace is supported. Multiple collections are supported within it.
 - Collections and folders can be created. Requests can be created, renamed, and deleted; folders and collections can be deleted with confirmation. Moving/reordering items and renaming containers are not implemented.
 - Collection runner, run readiness, run-scoped JSON Pointer extraction, bounded offset pagination, and sanitized JSON/CSV/HTML report export are implemented. Extraction and pagination work only during collection runs; individual requests use only the selected saved environment and send once.
-- Third-party collection import/conversion, OAuth2 grants other than password, refresh-token handling, form-data file upload, and working Settings/workspace-switcher actions are not implemented. History captures responses only for individual sends during the current session; selecting an entry displays the snapshot, and loading its request is a separate action. Copy as cURL is implemented in the main process and requires confirmation before writing potentially sensitive request data to the clipboard.
+- Third-party collection import/conversion, OAuth2 grants other than password, refresh-token handling, standalone binary bodies, and working Settings/workspace-switcher actions are not implemented. History captures responses only for individual sends during the current session; selecting an entry displays the snapshot, and loading its request is a separate action. Copy as cURL is implemented in the main process and requires confirmation before writing potentially sensitive request data to the clipboard.
 
 ## Development Checks
 
@@ -126,4 +126,4 @@ npm run typecheck
 npm run build
 ```
 
-`npm test` runs the offline schema/fixture suite. `npm run build` builds the Electron main, preload, and renderer bundles only. Windows installer and portable packaging use the separate `package:win` and `package:portable` scripts.
+`npm test` runs the offline schema/fixture, runner, request-helper, credential-protection, and report-format suites. `npm run build` builds the Electron main, preload, and renderer bundles only. Windows installer and portable packaging use the separate `package:win` and `package:portable` scripts.

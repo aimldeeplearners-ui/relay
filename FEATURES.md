@@ -69,7 +69,7 @@ The Body tab presents `none`, `json`, `xml`, `raw`, `urlencoded`, and `formdata`
 - `json`, `xml`, and `raw` use the text editor. JSON and XML set their respective content types; XML uses `text/xml; charset=utf-8`.
 - Enable **Protect at rest** when the raw body contains credentials; for URL-encoded and form-data modes, mark each sensitive row **Secret**.
 - SOAP envelopes can be entered as raw XML. Add a `SOAPAction` header in the Headers tab when the service requires it.
-- `urlencoded` and `formdata` provide editable key/value fields. URL-encoded requests use `application/x-www-form-urlencoded`; form-data uses multipart encoding. Form-data supports text fields only; file uploads are not available yet.
+- `urlencoded` provides editable key/value fields. Form-data uses multipart encoding and supports text or selected file parts. Files are limited to 50 MiB each; file contents and selection tokens stay in memory and must be selected again after restarting Relay.
 - `GET` and `HEAD` requests are sent without a body.
 
 There is no WSDL import, SOAP envelope generator, or separate SOAP request wizard.
@@ -99,14 +99,14 @@ Requests sent individually during the current app session appear in the sidebar 
 ## Current Limitations
 
 - Collections and folders can be created with names, and folders can be nested under the workspace, a collection, or another folder. Collections and folders can be deleted with confirmation, including their contents. Requests can be created inside collections/folders, renamed, and deleted with confirmation. Moving/reordering items is not implemented.
-- Form-data file uploads are not supported.
+- Standalone binary request bodies and files over 50 MiB are not supported. File selections are session-only; paths, tokens, and file contents are not persisted or exported.
 - Response-time, JSON Schema, XPath, JSON Pointer, and response-header assertion rules are saved with the request and run after the response arrives; XPath rules apply to XML responses.
 - OAuth2 supports only the legacy password grant configured per request; other grants and refresh tokens are not supported.
 - History responses, request/environment snapshots, and replay drafts are session-only and remain in renderer memory; they are not persisted to disk. Response bodies may contain sensitive data.
 - Open request tabs are session-only and are not restored when Relay restarts.
 - Extracted JSON Pointer values are available only for the current collection run and do not modify saved environments.
 - The top bar shows the single local workspace; switching workspaces is not implemented. **Copy as cURL** creates a PowerShell-compatible `curl.exe` command for the current request and asks for confirmation before copying it to the clipboard because it may contain credentials. Settings controls are not wired to actions yet.
-- `npm test` runs offline schema/fixture, runner, readiness, offset-pagination, response-extraction/assertion, credential-protection, OAuth2 helper, report-format, and cURL-builder checks; it does not contact the private RAN identity provider or exercise the UI through Electron.
+- `npm test` runs offline schema/fixture, runner, readiness, offset-pagination, response-extraction/assertion, credential-protection, multipart payload/cURL, OAuth2 helper, and report-format checks; it does not contact the private RAN identity provider or exercise the native file dialog through Electron.
 
 ## Data and Network Notes
 

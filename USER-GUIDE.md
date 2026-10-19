@@ -40,7 +40,7 @@ If you already imported a collection, select one of its requests instead.
 1. Choose an HTTP method and enter the URL. Use an environment placeholder such as `{{baseUrl}}/api/items`; Relay displays the resolved URL below the field.
 2. In **Params**, add query parameters. In **Headers**, add request headers. Disable a row to omit it without deleting it.
 3. In **Auth**, select No Auth, Bearer Token, Basic Auth, API Key, or OAuth2 Password Grant. Use credentials only with endpoints you trust.
-4. In **Body**, select the request body mode. JSON, XML, and raw use the text editor; URL-encoded and form-data use key/value rows. Form-data supports text only, not file uploads.
+4. In **Body**, select the request body mode. JSON, XML, and raw use the text editor; URL-encoded and form-data use key/value rows. For multipart **Form-data**, choose **File** in a row's type selector, then select a file. Files are limited to 50 MiB each.
 5. Click **Send** to run one request. Single-request sends do not perform collection-run extraction or pagination.
 
 For SOAP, enter the XML envelope in the XML or raw body editor and add a `SOAPAction` header if the service requires one. Relay sends XML with `text/xml; charset=utf-8`. There is no WSDL importer or SOAP envelope generator.

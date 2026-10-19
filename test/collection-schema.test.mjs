@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import Ajv from 'ajv';
 import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, getTestCaseVariables, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
-import { partitionCollectionSecrets, redactCollectionSecrets, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
+import { partitionCollectionSecrets, redactCollectionSecrets, removeFormDataFileSelections, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
 import { buildCurlCommand } from '../src/shared/curlCommand.ts';
+import { buildMultipartFormData } from '../src/shared/formData.ts';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared/responseExtraction.ts';
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../src/shared/responseAssertions.ts';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../src/shared/oauth2PasswordGrant.ts';
@@ -288,6 +289,26 @@ test('history response bodies are capped at the UTF-8 byte limit', () => {
   assert.ok(new TextEncoder().encode(entry.response.body).byteLength <= MAX_HISTORY_RESPONSE_BODY_BYTES);
 });
 
+test('multipart file fields validate while local selections are omitted from saved and exported copies', () => {
+  const collection = {
+    info: { name: 'File upload', version: '1.0.0' },
+    items: [{ name: 'Upload', request: {
+      method: 'POST',
+      url: 'https://api.example.test/upload',
+      body: { mode: 'formdata', formdata: [{ key: 'attachment', value: '', type: 'file', fileToken: 'session-token', fileName: 'sample.bin' }] },
+    } }],
+  };
+
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+  const saved = partitionCollectionSecrets(collection).collection;
+  const exported = removeFormDataFileSelections(collection);
+  assert.equal(saved.items[0].request.body.formdata[0].type, 'file');
+  assert.equal(saved.items[0].request.body.formdata[0].fileToken, undefined);
+  assert.equal(saved.items[0].request.body.formdata[0].fileName, undefined);
+  assert.equal(exported.items[0].request.body.formdata[0].fileToken, undefined);
+  assert.equal(collection.items[0].request.body.formdata[0].fileToken, 'session-token');
+});
+
 test('response extraction resolves nested, array, and escaped JSON Pointer paths', () => {
   const response = JSON.stringify({
     data: { created: { id: 42 } },
@@ -467,6 +488,47 @@ test('cURL command includes interpolated URL, headers, Bearer auth, and a safely
     request: { method: 'GET', url: 'https://api.example.test', auth: { type: 'oauth2', oauth2: { grantType: 'password', tokenUrl: 'https://idp.example.test/token', clientId: 'id', clientSecret: 'secret', username: 'user', password: 'pass' } } },
     environment: {},
   }), /OAuth2 token is unavailable/);
+});
+
+test('multipart form-data combines text and selected files and rejects missing selections', async () => {
+  const form = buildMultipartFormData([
+    { key: 'description', value: '{{description}}', enabled: true },
+    { key: 'attachment', value: '', type: 'file', fileToken: 'file-token', enabled: true },
+    { key: 'ignored', value: '', type: 'file', enabled: false },
+  ], { description: 'RAN package' }, new Map([
+    ['file-token', { blob: new Blob(['safe test payload']), fileName: 'package.bin' }],
+  ]));
+
+  assert.equal(form.get('description'), 'RAN package');
+  const attachment = form.get('attachment');
+  assert.equal(attachment.name, 'package.bin');
+  assert.equal(await attachment.text(), 'safe test payload');
+  assert.equal(form.has('ignored'), false);
+  assert.throws(() => buildMultipartFormData([
+    { key: 'attachment', value: '', type: 'file', enabled: true },
+  ], {}, new Map()), /Choose a file/);
+});
+
+test('cURL command uses a file form field instead of sending the file path as text', () => {
+  const command = buildCurlCommand({
+    request: { method: 'POST', url: 'https://api.example.test/upload', body: { mode: 'formdata', formdata: [
+      { key: 'description', value: 'test', enabled: true },
+      { key: 'attachment', value: '', type: 'file', fileToken: 'file-token', enabled: true },
+    ] } },
+    environment: {},
+  }, undefined, new Map([['file-token', { filePath: 'C:\\fixtures\\package.bin' }]]));
+
+  assert.ok(command.includes("--form-string 'description=test'"));
+  assert.ok(command.includes("--form 'attachment=@C:\\fixtures\\package.bin'"));
+});
+
+test('run readiness blocks enabled file fields without a current-session selection', () => {
+  const readiness = inspectRunReadiness([{
+    name: 'Upload package',
+    request: { method: 'POST', url: 'https://api.example.test/upload', body: { mode: 'formdata', formdata: [{ key: 'attachment', value: '', type: 'file', enabled: true }] } },
+  }], {});
+
+  assert.ok(readiness.blockers.some((issue) => /form-data file field/.test(issue.message)));
 });
 
 test('run readiness blocks missing variables and reports each variable without exposing its value', () => {

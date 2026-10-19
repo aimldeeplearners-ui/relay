@@ -9,7 +9,7 @@ Build a professional-grade desktop application (built with **Electron, React, Ty
 
 The Phase 2 prototype currently supports individual REST/SOAP requests, Relay-format JSON import/export, Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML import through one action, workspace environments, protected credentials, OAuth2 password-grant auth, JSON Schema/XPath/JSON Pointer/header assertions, response-time thresholds, request-level data-driven cases, JSON Pointer extraction, sequential collection runs, run-readiness checks, bounded offset pagination, Copy as cURL, and sanitized JSON/CSV/HTML run reports. Offset pagination is inferred from one enabled numeric `limit`/`offset` pair; its response-array JSON Pointer remains API-specific. OpenAPI 3.1 and remote references are unsupported. See [FEATURES.md](FEATURES.md) for user-facing behavior and [PHASE2.md](PHASE2.md) for verification.
 
-Still planned or unsupported: third-party collection import/conversion, file uploads, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope. Request history shows previous responses for individual sends and has a separate action to load the request; history remains session-only with a 256 KiB response-body cap per entry.
+Still planned or unsupported: third-party collection import/conversion, standalone binary bodies, uploads over 50 MiB, cursor/page-token pagination, multiple workspaces, container rename/reordering, and functional Settings. Collection JavaScript scripts and non-REST/SOAP protocols remain out of scope. Request history shows previous responses for individual sends and has a separate action to load the request; history remains session-only with a 256 KiB response-body cap per entry.
 
 ---
 
@@ -172,7 +172,7 @@ Relay-format collection/workspace documents imported, exported, or stored by the
             "secret": { "type": "boolean" },
             "raw": { "type": "string" },
             "urlencoded": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } },
-            "formdata": { "type": "array", "items": { "$ref": "#/definitions/KeyValue" } }
+            "formdata": { "type": "array", "items": { "$ref": "#/definitions/FormDataEntry" } }
           }
         },
         "assertions": {
@@ -220,6 +220,21 @@ Relay-format collection/workspace documents imported, exported, or stored by the
         }
       },
       "required": ["method", "url"]
+    },
+    "FormDataEntry": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "secret": { "type": "boolean" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["text", "file"] },
+        "fileToken": { "type": "string" },
+        "fileName": { "type": "string" }
+      },
+      "required": ["key", "value"],
+      "additionalProperties": false
     },
     "KeyValue": {
       "type": "object",

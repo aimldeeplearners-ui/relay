@@ -171,11 +171,16 @@ export function inspectRunReadiness(
   const invalidPagination: string[] = [];
   const invalidResponseTimeLimits: string[] = [];
   const invalidTestCases: string[] = [];
+  const missingFormDataFiles: string[] = [];
   const ambiguousTestCaseExtractions: string[] = [];
   const tooManyTestCases: string[] = [];
   const runVariables = new Set<string>();
 
   for (const { name, request } of requests) {
+    if (request.body?.mode === 'formdata' && request.body.formdata?.some((entry) =>
+      entry.enabled !== false && entry.key.trim() && entry.type === 'file' && !entry.fileToken,
+    )) missingFormDataFiles.push(name);
+
     const testCaseNames = new Set<string>();
     if ((request.testCases?.length ?? 0) > 100) tooManyTestCases.push(name);
     for (const testCase of request.testCases ?? []) {
@@ -272,6 +277,9 @@ export function inspectRunReadiness(
   }
   if (invalidTestCases.length) {
     blockers.push({ message: 'Data cases need unique non-empty names and unique enabled variable keys.', requestNames: [...new Set(invalidTestCases)] });
+  }
+  if (missingFormDataFiles.length) {
+    blockers.push({ message: 'Choose a file for each enabled form-data file field before running.', requestNames: missingFormDataFiles });
   }
   if (ambiguousTestCaseExtractions.length) {
     blockers.push({ message: 'A request with multiple data cases cannot also extract run-scoped variables for later requests.', requestNames: ambiguousTestCaseExtractions });
