@@ -8,6 +8,7 @@ Relay is a Windows desktop application for building and testing REST and SOAP HT
 - Import Relay collections or use the single API-definition import action for Swagger 2.0 (the predecessor specification) and OpenAPI 3.0 JSON/YAML definitions.
 - Configure query parameters, headers, Bearer/Basic/API-key auth, OAuth2 password-grant auth, and JSON, XML, raw, URL-encoded, or multipart form-data bodies with text and files up to 50 MiB.
 - Validate responses with status and response-time thresholds, JSON Schema, XPath, JSON Pointer, or response-header assertions.
+- Run pre-request and post-response JavaScript hooks at collection, folder, and request scope in a bounded QuickJS sandbox; review and approve their source before execution, and pass run-scoped values between requests.
 - Run collections sequentially, exercise named data-driven cases, extract JSON Pointer values for later requests, check run readiness, and use bounded limit/offset pagination. Imports infer pagination when a request has one enabled numeric `limit`/`offset` pair; the response-array JSON Pointer remains API-specific.
 - Inspect previous responses from session history, or load a request into an unsaved draft to send it again.
 - Use the local Debug Console to inspect sanitized request/response metadata for individual sends and collection runs; entries are session-only and omit bodies.
@@ -15,7 +16,7 @@ Relay is a Windows desktop application for building and testing REST and SOAP HT
 - Copy the active request as a PowerShell-compatible cURL command after confirmation.
 - Export sanitized JSON, CSV, or HTML collection-run reports.
 
-Relay imports its own JSON collections and API definitions through separate actions. The single API-definition action accepts Swagger 2.0 (the predecessor specification) and OpenAPI 3.0. Other API-client collection formats are not converted. Scripted collections, standalone binary bodies, files over 50 MiB, cursor pagination, and multiple workspaces are not supported.
+Relay imports its own JSON collections and API definitions through separate actions. The single API-definition action accepts Swagger 2.0 (the predecessor specification) and OpenAPI 3.0. Other API-client collection formats are not converted. Client-specific scripting APIs, standalone binary bodies, files over 50 MiB, cursor pagination, and multiple workspaces are not supported.
 
 ## Requirements
 

@@ -4,7 +4,7 @@
 This project is a desktop-based API testing application built with **Electron, React, TypeScript, and Tailwind CSS**. 
 - **Core Focus:** Dedicated exclusively to **REST** and **SOAP** APIs.
 - **Specification:** Relay-format collection/workspace documents must adhere to **`RestSoapSpecEnterprise v2.0`** (stored in `spec/rest-soap-spec.json`). Swagger/OpenAPI source definitions are converted into this format. Transient UI/history state uses shared TypeScript contracts and is not persisted as a collection document.
-- **Forbidden:** Do not introduce support for GraphQL, gRPC, WebSockets, or a collection JavaScript sandbox (`pm.test` scripting). Use declarative validations (JSON Schema and XPath) instead.
+- **Protocol limits:** Do not introduce support for GraphQL, gRPC, or WebSockets. Relay-format collections support bounded JavaScript hooks through the `relay.*` API; require source review and session-only approval before sends or runs, and re-review after source changes. Do not add client-specific compatibility, third-party script imports, or host APIs.
 
 ---
 
@@ -18,6 +18,7 @@ When generating code or suggesting packages, adhere strictly to these libraries:
 * **Validation & Assertions:**
   * **JSON Schema:** **AJV** (Another JSON Schema Validator) for REST response validation.
   * **XPath:** `xpath` and `xmldom` packages for XML node verification in SOAP responses.
+* **Script Runtime:** `quickjs-emscripten` runs Relay scripts in an isolated, resource-limited context. Keep filesystem, Node.js, and network APIs unavailable to scripts.
 
 ---
 
@@ -28,7 +29,7 @@ When generating code or suggesting packages, adhere strictly to these libraries:
 * **Shared types (`src/shared/api.ts`):** Defines the collection, request, environment, response, and IPC contracts.
 * Collection items are recursive. Optional `type` distinguishes `collection` and `folder`; request items carry a `request`. Untyped legacy items remain accepted by the schema.
 
-The product specification describes planned target behavior. Check `FEATURES.md` before assuming a capability is implemented; the current phase supports one API-definition import action for Swagger 2.0 (the predecessor specification) and OpenAPI 3.0, sequential collection runs, session-only request-history response snapshots and unsaved replay drafts, a local session-only body-free Debug Console, rotating metadata-only diagnostic logs, request-level data-driven cases, readiness checks, bounded offset pagination, declarative JSON Pointer extraction/assertions, response-header assertions, response-time thresholds, JSON Schema/XPath assertion editors, confirmed Copy as cURL, and sanitized JSON/CSV/HTML reports, but not third-party collection import or JavaScript scripts.
+The product specification describes planned target behavior. Check `FEATURES.md` before assuming a capability is implemented; the current phase supports one API-definition import action for Swagger 2.0 (the predecessor specification) and OpenAPI 3.0, sequential collection runs, session-only request-history response snapshots and unsaved replay drafts, a local session-only body-free Debug Console, rotating metadata-only diagnostic logs, request-level data-driven cases, readiness checks, bounded offset pagination, declarative JSON Pointer extraction/assertions, response-header assertions, response-time thresholds, JSON Schema/XPath assertion editors, collection/folder/request JavaScript hooks in a resource-limited QuickJS sandbox, confirmed Copy as cURL, and sanitized JSON/CSV/HTML reports. Third-party collection import and client-specific scripts are unsupported.
 
 ---
 

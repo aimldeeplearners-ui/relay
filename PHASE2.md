@@ -29,11 +29,19 @@ Run requests from a selected collection in tree order using the selected environ
 
 ### Step 3: Request Dependencies and Run-Scoped Variables — Complete
 
-Add declarative response extraction (for example, JSON Pointer paths mapped to run-scoped variable names) so a response value can feed a later request. Keep run variables separate from saved environment secrets and do not execute JavaScript test scripts. Mock APIs may return synthetic POST IDs without persisting the created record; use a persistent test service to validate create-then-update workflows.
+Add declarative response extraction (for example, JSON Pointer paths mapped to run-scoped variable names) so a response value can feed a later request. Keep run variables separate from saved environment secrets. Mock APIs may return synthetic POST IDs without persisting the created record; use a persistent test service to validate create-then-update workflows.
 
 **Completed:** Requests can define JSON Pointer extraction rules in the Tests tab. During a collection run, extracted values are overlaid on the selected environment for subsequent requests; they are temporary and omitted from reports. Missing/invalid paths fail the run assertion and respect stop-on-failure.
 
 **Verification:** Coverage includes nested objects, arrays, escaped JSON Pointer keys, missing paths, invalid JSON, and blank variable names. The current forty-five-test offline suite, typecheck, and production build pass.
+
+### Step 3a: Sandboxed JavaScript Hooks — Complete
+
+Support pre-request and post-response hooks at collection, folder, and request scope, with request mutation, response inspection, assertions, and run-scoped variable sharing. Keep script execution isolated and bounded, and never expose filesystem, Node.js, or network APIs.
+
+**Completed:** Relay executes hooks in collection-to-folder-to-request order using QuickJS. `relay.request`, `relay.response`, `relay.environment`, `relay.variables`, and `relay.assert` provide the supported API. Hooks run for individual sends and sequential collection runs; inherited hooks and run variables are included in collection execution, while saved environments remain unchanged. Before either action, Relay displays active script source and requires session-only approval; edits require re-review. Client-specific scripting APIs and third-party collection-script import remain unsupported.
+
+**Verification:** Focused tests cover request mutation, response assertions and extraction, run-variable sharing, host API isolation, execution deadlines, and script-scope inheritance. Resource limits are enforced for script size, context, memory, stack, and execution time.
 
 ### Step 4: Credential Protection
 
@@ -61,7 +69,7 @@ The local Debug Console is implemented for troubleshooting only. It is session-o
 
 ## Phase 2 Guardrails
 
-- Keep the product REST/SOAP-only; do not add GraphQL, gRPC, WebSocket, or collection JavaScript sandbox support.
+- Keep the product REST/SOAP-only; do not add GraphQL, gRPC, or WebSocket support. Maintain the bounded QuickJS sandbox for Relay scripts; do not add client-specific compatibility APIs, host APIs, or third-party collection-script import.
 - Continue using the Relay collection schema as the canonical import/export format.
 - Do not store real credentials in fixtures or reports.
 - Do not generate installer/portable executables as part of ordinary checks; package only when explicitly requested.

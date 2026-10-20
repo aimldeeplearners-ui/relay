@@ -78,6 +78,10 @@ Put the token request before the protected requests in the collection. On the to
 
 Before execution, Relay checks the active environment and request URLs. Missing or blank variables and invalid URLs block the run. Write methods and requests without response checks require review. Extracted values from earlier requests are allowed; Relay cannot validate those URLs until the preceding response arrives.
 
+Before sending a request or running a collection with active JavaScript hooks, Relay displays their source and asks you to approve them for the current session. Hooks run from the outer collection through folders to the request, in an isolated QuickJS context. The **Scripts** tab lets you inspect each inherited scope. Pre-request scripts can edit `relay.request`; post-response scripts can read `relay.response` fields including `status`, `headers`, `body`, and parsed `jsonBody`. Use `relay.assert(name, passed, detail?)` for test results and `relay.variables.get/set` for values shared by later requests in that run. `relay.environment.get/set` reads the active environment and stores overrides only for the current run. These writes do not change saved environments. Editing a hook invalidates its approval.
+
+Scripts are limited to 64 KiB each, 100 ms execution, 16 MiB memory, and 2 MiB total context. Response bodies over 1 MiB are not made available to scripts. The sandbox has no Node.js, filesystem, or network APIs. Script source is saved and exported with the collection; never put credentials in scripts. The Relay `relay.*` API does not emulate other clients' scripting APIs. For standalone **Send**, hooks run for that request, but script variables do not carry over to a later send.
+
 The run report lists status, duration, response size, assertions, and extraction results. It omits response bodies, headers, and extracted values. Select JSON, CSV, or HTML and use **Export report** to save it.
 
 ## Request History
@@ -120,7 +124,7 @@ To export, select **Relay workspace**, a collection, or a folder, then click the
 - **Pagination is off:** Import inference requires one enabled, numeric `limit` row and one enabled, numeric `offset` row. Check **Params** and enable pagination manually if the API uses a different naming scheme.
 - **Pagination stops or fails:** Set **Items JSON Pointer** to the array in the response. A non-array or invalid JSON response cannot be used to determine whether another page exists.
 - **Local API connection fails:** Ensure the local API is running in its terminal and the selected **Local API** environment uses `http://api.relay.localhost:3000`.
-- **Run asks for review:** Write methods can change data; requests without assertions or extraction rules are evaluated by HTTP status alone. Review the listed requests before continuing.
+- **Run asks for review:** Write methods can change data; requests without declarative assertions or extraction rules rely on HTTP status and any script assertions. Review the listed requests before continuing.
 
 ## More Documentation
 

@@ -143,6 +143,11 @@ h1, .request-name-input { color: #1f3035; }
 .body-secret-toggle { color: #5c7477; }
 .code-editor { border-color: #d9e3e1; background: #f6f9f7; color: #263d41; font-family: "Cascadia Code", Consolas, monospace; }
 .assertion-icon { background: #dff0ef; color: #087d83; }
+.script-scope-editor { border-color: #dce7e5; background: #fbfcfa; }
+.script-code-field { color: #607277; }
+.script-code-field textarea { border-color: #d6e2df; background: #f5f9f8; color: #263d41; font-family: "Cascadia Code", Consolas, monospace; }
+.script-api-note { border-left-color: #087d83; background: #e7f2ef; color: #5d7374; }
+.script-api-note code { color: #075f67; }
 .assertion-editor-section { margin-top: 14px; }
 .assertion-editor-section .table-caption { margin-bottom: 5px; }
 .data-case-card { border-color: #dce5e3; background: #f8faf9; }

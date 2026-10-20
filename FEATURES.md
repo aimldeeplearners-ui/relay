@@ -3,7 +3,7 @@
 **Status:** Phase 2 desktop prototype  
 **Last reviewed:** 2026-10-19
 
-Relay is a Windows desktop client for sending REST and SOAP HTTP requests, viewing responses, and running supported response assertions. This guide describes the current implementation, including limitations, rather than planned features.
+Relay is a Windows desktop client for sending REST and SOAP HTTP requests, viewing responses, and running supported response assertions and sandboxed JavaScript hooks. This guide describes the current implementation, including limitations, rather than planned features.
 
 ## Quick Start
 
@@ -36,11 +36,18 @@ Choose a request in the collection tree, review its method and URL, then click *
 - Use **Run selection** to execute the selected collection or folder in tree order, or select **Relay workspace** to run all requests. The active environment is used for every request. Stop on failure is enabled by default; you can also stop after the current request.
 - On Relay-format import, requests with exactly one enabled numeric `limit` and `offset` query parameter are automatically configured for offset pagination; explicit pagination settings are preserved. Page size and starting offset come from those values, maximum pages defaults to 10, and you set the response-array JSON Pointer in **Params**. Collection runs fetch pages sequentially and show each page in the run report. A short page ends pagination; a full page at the maximum is reported as potentially incomplete. Cursor pagination is not supported.
 - Before a run, Relay checks that referenced environment variables are set and request URLs are valid. Missing values and invalid URLs block execution; state-changing requests and requests without response checks require review. The check never displays environment values.
+- Pre-request and post-response JavaScript hooks can be defined on collections, folders, and requests. Hooks run in order from outer collection to request inside a QuickJS sandbox. Before sending or running a collection with hooks, Relay displays their source for explicit, session-only approval; changed hooks require review again.
 - The run report shows each request's method, status, duration, response-body size, assertion results, and response-extraction outcomes. Choose JSON, Excel-compatible CSV, or standalone HTML when exporting. All formats omit response bodies, headers, and extracted values.
 
 The Relay collection importer accepts Relay JSON. The single OpenAPI importer accepts Swagger 2.0 and OpenAPI 3.0 JSON/YAML definitions; other formats are not converted.
 
 ## Request Configuration
+
+### JavaScript Scripts
+
+Use the **Scripts** tab to define pre-request and post-response hooks for the selected request, its collection, and its containing folders. Hooks run in collection-to-folder-to-request order. Pre-request hooks can modify `relay.request`; post-response hooks can inspect `relay.response` (`status`, `statusText`, `headers`, `body`, `jsonBody`, `durationMs`, and `sizeBytes`). Use `relay.assert(name, passed, detail?)` to add results to the Tests view and `relay.variables.get/set` to pass string values through a collection run. `relay.environment.get/set` reads the active environment and creates only a run-scoped override; saved environment values are not changed. Scripts are also used for individual sends, but their variable changes do not persist to later individual sends.
+
+Hooks run in QuickJS with no Node.js, filesystem, or network APIs. Each script is limited to 64 KiB, execution to 100 ms, memory to 16 MiB, and total context to 2 MiB; response bodies larger than 1 MiB are not passed to scripts. Script source is saved with the collection and may be included in collection exports, so do not hardcode credentials. Relay supports its own `relay.*` API; client-specific scripting APIs and third-party collection-script import are not supported.
 
 ### Method and URL
 

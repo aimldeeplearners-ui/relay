@@ -1,10 +1,49 @@
-import type { AssertionResult, CollectionItem, KeyValue, RequestDefinition, RequestTestCase } from './api';
+import type { AssertionResult, CollectionItem, KeyValue, RelayRequestScripts, RequestDefinition, RequestTestCase } from './api';
 export type { CollectionRunReport, CollectionRunResult } from './api';
 
 export interface CollectionRunTarget {
   name: string;
   path: string;
   request: RequestDefinition;
+  scriptScopes: RelayRequestScripts[];
+}
+
+export interface ScriptReviewScope {
+  key: string;
+  title: string;
+  scripts: RelayRequestScripts;
+}
+
+export type ScriptApprovalMap = Record<string, string>;
+
+function scriptSourceSignature(scripts: RelayRequestScripts): string {
+  return JSON.stringify([scripts.preRequest ?? '', scripts.postResponse ?? '']);
+}
+
+export function findUnapprovedScriptScopes(
+  scopes: ScriptReviewScope[],
+  approvals: ScriptApprovalMap,
+): ScriptReviewScope[] {
+  const seen = new Set<string>();
+  return scopes.filter(({ key, scripts }) => {
+    const active = Boolean(scripts.preRequest?.trim() || scripts.postResponse?.trim());
+    if (!active || seen.has(key) || approvals[key] === scriptSourceSignature(scripts)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function approveScriptScopes(
+  scopes: ScriptReviewScope[],
+  approvals: ScriptApprovalMap,
+): ScriptApprovalMap {
+  const next = { ...approvals };
+  for (const { key, scripts } of scopes) {
+    if (scripts.preRequest?.trim() || scripts.postResponse?.trim()) {
+      next[key] = scriptSourceSignature(scripts);
+    }
+  }
+  return next;
 }
 
 export interface RunReadinessIssue {
@@ -303,20 +342,29 @@ export function inspectRunReadiness(
   }
   if (requestsWithoutChecks.length) {
     warnings.push({
-      message: 'No response assertions or extractions are configured; HTTP status alone determines pass/fail.',
+      message: 'No declarative response assertions or extractions are configured; HTTP status and any script assertions determine pass/fail.',
       requestNames: requestsWithoutChecks,
     });
   }
-
   return { blockers, warnings };
 }
 
-export function collectRunnableRequests(items: CollectionItem[], parentPath = ''): CollectionRunTarget[] {
+export function collectRunnableRequests(
+  items: CollectionItem[],
+  parentPath = '',
+  inheritedScripts: RelayRequestScripts[] = [],
+): CollectionRunTarget[] {
   const requests: CollectionRunTarget[] = [];
   for (const [index, item] of items.entries()) {
     const path = parentPath ? `${parentPath}.${index}` : `${index}`;
-    if (item.request) requests.push({ name: item.name, path, request: item.request });
-    if (item.items) requests.push(...collectRunnableRequests(item.items, path));
+    const scriptScopes = item.scripts ? [...inheritedScripts, item.scripts] : inheritedScripts;
+    if (item.request) requests.push({
+      name: item.name,
+      path,
+      request: item.request,
+      scriptScopes: item.request.scripts ? [...scriptScopes, item.request.scripts] : scriptScopes,
+    });
+    if (item.items) requests.push(...collectRunnableRequests(item.items, path, scriptScopes));
   }
   return requests;
 }

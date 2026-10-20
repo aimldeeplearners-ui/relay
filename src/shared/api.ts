@@ -25,6 +25,7 @@ export interface CollectionItem {
   name: string;
   type?: 'collection' | 'folder';
   description?: string;
+  scripts?: RelayRequestScripts;
   items?: CollectionItem[];
   request?: RequestDefinition;
 }
@@ -47,6 +48,11 @@ export interface OffsetPaginationConfig {
 export interface RequestTestCase {
   name: string;
   values: KeyValue[];
+}
+
+export interface RelayRequestScripts {
+  preRequest?: string;
+  postResponse?: string;
 }
 
 export type ResponseValueOperator = 'exists' | 'equals';
@@ -100,6 +106,7 @@ export interface RequestDefinition {
   queryParams?: KeyValue[];
   pagination?: OffsetPaginationConfig;
   testCases?: RequestTestCase[];
+  scripts?: RelayRequestScripts;
   headers?: KeyValue[];
   extractVariables?: { name: string; jsonPointer: string }[];
   auth?: {
@@ -137,6 +144,8 @@ export interface RequestDefinition {
 export interface ApiRequestInput {
   request: RequestDefinition;
   environment: Record<string, string>;
+  scriptScopes?: RelayRequestScripts[];
+  scriptVariables?: Record<string, string>;
 }
 
 export interface AssertionResult {
@@ -184,11 +193,13 @@ export interface CurlCopyResult {
 export interface ApiResponse {
   status: number;
   statusText: string;
+  executedMethod?: HttpMethod;
   headers: Record<string, string>;
   body: string;
   durationMs: number;
   sizeBytes: number;
   tests: AssertionResult[];
+  scriptVariables?: Record<string, string>;
   error?: string;
 }
 

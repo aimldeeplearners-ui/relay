@@ -6,14 +6,14 @@ import {
   Square, Terminal,
   RotateCcw, Trash2, X,
 } from 'lucide-react';
-import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, FormDataEntry, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RequestDefinition, RequestTestCase, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
-import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue } from '../shared/collectionRunner';
+import type { ApiResponse, CollectionDocument, CollectionItem, CollectionRunReport, CollectionRunResult, FormDataEntry, HttpMethod, JsonPointerAssertion, KeyValue, OffsetPaginationConfig, RelayRequestScripts, RequestDefinition, RequestTestCase, ResponseHeaderAssertion, RunReportFormat } from '../shared/api';
+import { approveScriptScopes, buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, findUnapprovedScriptScopes, getOffsetPaginationProgress, getRequestTestCases, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing, type RunReadinessIssue, type ScriptApprovalMap, type ScriptReviewScope } from '../shared/collectionRunner';
 import { isSensitiveCredentialKey } from '../shared/credentialProtection';
 import { createDebugConsoleEntry, MAX_DEBUG_CONSOLE_ENTRIES, type DebugConsoleEntry, type DebugConsoleSource } from '../shared/debugConsole';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../shared/responseExtraction';
 import { createRequestHistoryEntry, createRequestHistoryReplay, type RequestHistoryEntry, type RequestHistoryReplay } from '../shared/requestHistory';
 
-type RequestTab = 'Params' | 'Headers' | 'Auth' | 'Body' | 'Tests';
+type RequestTab = 'Params' | 'Headers' | 'Auth' | 'Body' | 'Tests' | 'Scripts';
 type ResponseTab = 'Body' | 'Headers' | 'Tests';
 type HistoryReplayContext = Pick<RequestHistoryReplay, 'requestName' | 'environment' | 'environmentName'>;
 type OAuth2PasswordConfig = NonNullable<NonNullable<RequestDefinition['auth']>['oauth2']>;
@@ -50,7 +50,20 @@ const initialCollection: CollectionDocument = {
 };
 
 const methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-const requestTabs: RequestTab[] = ['Params', 'Headers', 'Auth', 'Body', 'Tests'];
+const requestTabs: RequestTab[] = ['Params', 'Headers', 'Auth', 'Body', 'Tests', 'Scripts'];
+
+interface ScriptScopeTarget {
+  path: string;
+  name: string;
+  type?: CollectionItem['type'];
+  scripts: RelayRequestScripts;
+}
+
+interface PendingScriptReview {
+  targetName: string;
+  action: 'send' | 'run';
+  scopes: ScriptReviewScope[];
+}
 
 function interpolate(value: string, environment: Record<string, string>): string {
   return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_placeholder, key: string) => environment[key] ?? `{{${key}}}`);
@@ -91,6 +104,45 @@ function getCollectionItemAtPath(items: CollectionItem[], path: string): Collect
     currentItems = currentItem.items ?? [];
   }
   return currentItem;
+}
+
+function getContainerScriptScopes(items: CollectionItem[], requestPath: string): ScriptScopeTarget[] {
+  if (!/^\d+(?:\.\d+)*$/.test(requestPath)) return [];
+  const indexes = requestPath.split('.').map(Number);
+  const scopes: ScriptScopeTarget[] = [];
+  let currentItems = items;
+  let currentPath = '';
+  for (const index of indexes.slice(0, -1)) {
+    const item = currentItems[index];
+    if (!item?.items) break;
+    currentPath = currentPath ? `${currentPath}.${index}` : String(index);
+    scopes.push({ path: currentPath, name: item.name, type: item.type, scripts: item.scripts ?? {} });
+    currentItems = item.items;
+  }
+  return scopes;
+}
+
+function getRequestScriptScopes(items: CollectionItem[], requestPath: string, request: RequestDefinition): RelayRequestScripts[] {
+  const scopes = getContainerScriptScopes(items, requestPath).map(({ scripts }) => scripts);
+  if (request.scripts) scopes.push(request.scripts);
+  return scopes;
+}
+
+function getRequestScriptReviewScopes(
+  items: CollectionItem[],
+  requestPath: string,
+  request: RequestDefinition,
+  requestName: string,
+): ScriptReviewScope[] {
+  const scopes: ScriptReviewScope[] = getContainerScriptScopes(items, requestPath).map((scope) => ({
+    key: `container:${scope.path}`,
+    title: `${scope.type === 'collection' ? 'Collection' : 'Folder'}: ${scope.name}`,
+    scripts: scope.scripts,
+  }));
+  if (request.scripts) {
+    scopes.push({ key: `request:${requestPath}`, title: `Request: ${requestName}`, scripts: request.scripts });
+  }
+  return scopes;
 }
 
 function getCollectionChildrenAtPath(items: CollectionItem[], path: string): CollectionItem[] | undefined {
@@ -250,6 +302,8 @@ function App(): JSX.Element {
   const [runReport, setRunReport] = useState<CollectionRunReport | null>(null);
   const [runReportFormat, setRunReportFormat] = useState<RunReportFormat>('json');
   const [readinessReview, setReadinessReview] = useState<{ targetName: string; blockers: RunReadinessIssue[]; warnings: RunReadinessIssue[] } | null>(null);
+  const [scriptReview, setScriptReview] = useState<PendingScriptReview | null>(null);
+  const approvedScriptScopes = useRef<ScriptApprovalMap>({});
   const [runProgress, setRunProgress] = useState('');
   const [runBusy, setRunBusy] = useState(false);
   const [stopOnFailure, setStopOnFailure] = useState(true);
@@ -398,6 +452,14 @@ function App(): JSX.Element {
     setRunReport(null);
   }
 
+  function updateContainerScripts(path: string, scripts: RelayRequestScripts): void {
+    setCollection((current) => ({
+      ...current,
+      items: updateCollectionItemAtPath(current.items, path, (item) => ({ ...item, scripts })),
+    }));
+    setRunReport(null);
+  }
+
   function getRequestsToRun(): { name: string; requests: ReturnType<typeof collectRunnableRequests> } | null {
     if (historyReplayContext) return null;
     const currentItems = updateCollectionItemAtPath(collection.items, selectedPath, (item) =>
@@ -410,12 +472,22 @@ function App(): JSX.Element {
     const targetPath = activeRequest ? selectedCollectionPath : selectedContainerPath;
     const target = getCollectionItemAtPath(currentItems, targetPath);
     if (!target?.items) return null;
-    return { name: target.name, requests: collectRunnableRequests([target]) };
+    const inheritedScripts = getContainerScriptScopes(currentItems, targetPath).map(({ scripts }) => scripts);
+    return { name: target.name, requests: collectRunnableRequests([target], targetPath, inheritedScripts) };
   }
 
   async function runSelection(skipReadinessCheck = false): Promise<void> {
     const target = getRequestsToRun();
     if (!target?.requests.length || runBusy) return;
+
+    const reviewScopes = target.requests.flatMap((entry) =>
+      getRequestScriptReviewScopes(collection.items, entry.path, entry.request, entry.name),
+    );
+    const unapprovedScopes = findUnapprovedScriptScopes(reviewScopes, approvedScriptScopes.current);
+    if (unapprovedScopes.length) {
+      setScriptReview({ targetName: target.name, action: 'run', scopes: unapprovedScopes });
+      return;
+    }
 
     if (!skipReadinessCheck) {
       const readiness = inspectRunReadiness(target.requests, environment);
@@ -475,7 +547,12 @@ function App(): JSX.Element {
             const environmentForRun = buildTestCaseEnvironment(environment, runVariables, testCase);
             let responseForRun: ApiResponse;
             try {
-              responseForRun = await window.relay.executeRequest({ request: requestForRun, environment: environmentForRun });
+              responseForRun = await window.relay.executeRequest({
+                request: requestForRun,
+                environment: environmentForRun,
+                scriptScopes: entry.scriptScopes,
+                scriptVariables: runVariables,
+              });
             } catch {
               responseForRun = {
                 status: 0,
@@ -497,6 +574,7 @@ function App(): JSX.Element {
               response: responseForRun,
             });
 
+            Object.assign(runVariables, responseForRun.scriptVariables ?? {});
             const extractionResult = responseForRun.error
               ? { variables: {}, outcomes: (entry.request.extractVariables ?? []).map(({ name, jsonPointer }) => ({ name, jsonPointer, passed: false })) }
               : extractResponseVariables(responseForRun.body, entry.request.extractVariables ?? []);
@@ -535,7 +613,7 @@ function App(): JSX.Element {
             const pageSuffix = pagination ? ` (page ${pageNumber})` : '';
             results.push({
               name: `${entry.name}${caseSuffix}${pageSuffix}`,
-              method: entry.request.method,
+              method: responseForRun.executedMethod ?? entry.request.method,
               status: responseForRun.status,
               statusText: responseForRun.statusText,
               durationMs: responseForRun.durationMs,
@@ -606,6 +684,7 @@ function App(): JSX.Element {
   }
 
   const requestsToRun = getRequestsToRun();
+  const scriptScopesForEditor = getContainerScriptScopes(collection.items, selectedPath);
   const runPassedCount = runReport?.results.filter((result) => result.passed).length ?? 0;
 
   async function sendRequest(): Promise<void> {
@@ -613,10 +692,22 @@ function App(): JSX.Element {
     const requestPath = selectedPath;
     const requestToSend = request;
     const environmentToUse = environment;
+    const unapprovedScopes = findUnapprovedScriptScopes(
+      getRequestScriptReviewScopes(collection.items, requestPath, requestToSend, activeRequest || 'Request'),
+      approvedScriptScopes.current,
+    );
+    if (unapprovedScopes.length) {
+      setScriptReview({ targetName: activeRequest || 'Request', action: 'send', scopes: unapprovedScopes });
+      return;
+    }
     setLoading(true);
     setRunReport(null);
     try {
-      const result = await window.relay.executeRequest({ request: requestToSend, environment: environmentToUse });
+      const result = await window.relay.executeRequest({
+        request: requestToSend,
+        environment: environmentToUse,
+        scriptScopes: getRequestScriptScopes(collection.items, selectedPath, requestToSend),
+      });
       setResponsesByPath((current) => ({ ...current, [requestPath]: result }));
       recordHistoryRequest(requestToSend, environmentToUse, result);
       recordDebugEntry({ source: 'Send', requestName: activeRequest || `${requestToSend.method} request`, request: requestToSend, environment: environmentToUse, response: result });
@@ -1205,6 +1296,23 @@ function App(): JSX.Element {
               <ResponseExtractionEditor rules={request.extractVariables ?? []} onChange={(rules) => setRequest((current) => ({ ...current, extractVariables: rules }))} />
               <DataDrivenTestCaseEditor testCases={request.testCases ?? []} onChange={(testCases) => updateRequest((current) => ({ ...current, testCases }))} />
             </div>}
+            {requestTab === 'Scripts' && <div className="scripts-editor">
+              <div className="assertion-heading"><div className="assertion-icon"><Code2 size={16} /></div><div><strong>JavaScript hooks</strong><span>Run in an isolated QuickJS sandbox, with CPU and memory limits.</span></div></div>
+              {activeRequest ? <>
+                {scriptScopesForEditor.map((scope) => <RelayScriptsEditor
+                  key={scope.path}
+                  title={`${scope.type === 'collection' ? 'Collection' : 'Folder'}: ${scope.name}`}
+                  scripts={scope.scripts}
+                  onChange={(scripts) => updateContainerScripts(scope.path, scripts)}
+                />)}
+                <RelayScriptsEditor
+                  title={`Request: ${activeRequest}`}
+                  scripts={request.scripts ?? {}}
+                  onChange={(scripts) => updateRequest((current) => ({ ...current, scripts }))}
+                />
+              </> : <div className="empty-table">Select a request to configure its scripts.</div>}
+              <div className="script-api-note"><strong>Relay API:</strong> mutate <code>relay.request</code> before sending; inspect <code>relay.response</code> afterward; use <code>relay.assert(name, passed, detail?)</code> for checks; use <code>relay.variables.get/set</code> for run-scoped values. <code>relay.environment.set</code> also writes a run-scoped override, never the saved environment. Scripts have no Node, filesystem, or network access. Do not hardcode secrets; script source is saved with the collection.</div>
+            </div>}
           </div>
         </section>
 
@@ -1224,6 +1332,7 @@ function App(): JSX.Element {
         </section>}
         <footer className="statusbar"><span><span className="status-dot" /> Ready</span><span>REST / SOAP</span><span>Local workspace</span><button className="debug-console-trigger" onClick={() => setDebugConsoleOpen(true)}><Terminal size={13} /> Debug console{debugEntries.length > 0 && <span className="debug-console-count">{debugEntries.length}</span>}</button></footer>
         {readinessReview && <div className="environment-backdrop" role="presentation" onMouseDown={() => setReadinessReview(null)}><section className="environment-dialog readiness-dialog" role="dialog" aria-modal="true" aria-labelledby="readiness-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="environment-dialog-heading"><div><div className="eyebrow">RUN READINESS</div><h2 id="readiness-dialog-title">Review before running</h2></div><button className="icon-button" title="Close readiness check" aria-label="Close readiness check" onClick={() => setReadinessReview(null)}><X size={17} /></button></div><p className="readiness-intro">{readinessReview.targetName} · Environment: {environmentName}</p>{readinessReview.blockers.length > 0 && <section className="readiness-group blocked"><h3>Must fix before running</h3><ul>{readinessReview.blockers.map((issue, index) => <li key={`${issue.message}-${index}`}><strong>{issue.message}</strong><span>{issue.requestNames.join(', ')}</span></li>)}</ul></section>}{readinessReview.warnings.length > 0 && <section className="readiness-group warnings"><h3>Review these warnings</h3><ul>{readinessReview.warnings.map((issue, index) => <li key={`${issue.message}-${index}`}><strong>{issue.message}</strong><span>{issue.requestNames.join(', ')}</span></li>)}</ul></section>}<div className="environment-dialog-footer">Environment values are never displayed in this check.</div><div className="create-item-actions"><button className="quiet-button" onClick={() => setReadinessReview(null)}>{readinessReview.blockers.length ? 'Back to editor' : 'Cancel'}</button>{!readinessReview.blockers.length && <button className="send-button" onClick={() => void runSelection(true)}>Run anyway</button>}</div></section></div>}
+        {scriptReview && <div className="environment-backdrop" role="presentation" onMouseDown={() => setScriptReview(null)}><section className="environment-dialog script-review-dialog" role="dialog" aria-modal="true" aria-labelledby="script-review-title" onMouseDown={(event) => event.stopPropagation()}><div className="environment-dialog-heading"><div><div className="eyebrow">SCRIPT PERMISSION · THIS SESSION</div><h2 id="script-review-title">Review hooks before {scriptReview.action === 'send' ? 'sending' : 'running'}</h2></div><button className="icon-button" title="Cancel script review" aria-label="Cancel script review" onClick={() => setScriptReview(null)}><X size={17} /></button></div><p className="readiness-intro">{scriptReview.targetName}: these hooks can read environment values and modify outgoing requests. Review the source before enabling.</p><div className="script-review-list">{scriptReview.scopes.map((scope) => <article className="script-review-scope" key={scope.key}><strong>{scope.title}</strong>{scope.scripts.preRequest?.trim() && <div><span className="script-review-phase">Pre-request</span><pre className="script-review-code">{scope.scripts.preRequest}</pre></div>}{scope.scripts.postResponse?.trim() && <div><span className="script-review-phase">Post-response</span><pre className="script-review-code">{scope.scripts.postResponse}</pre></div>}</article>)}</div><div className="environment-dialog-footer">Approval lasts until Relay closes. Changing a hook requires review again.</div><div className="create-item-actions"><button className="quiet-button" onClick={() => setScriptReview(null)}>Cancel</button><button className="send-button" onClick={() => { const review = scriptReview; approvedScriptScopes.current = approveScriptScopes(review.scopes, approvedScriptScopes.current); setScriptReview(null); if (review.action === 'send') void sendRequest(); else void runSelection(); }}>Enable hooks and continue</button></div></section></div>}
       </main>
       {debugConsoleOpen && (
         <div className="environment-backdrop" role="presentation" onMouseDown={() => setDebugConsoleOpen(false)}>
@@ -1363,6 +1472,18 @@ function StructuredBodyEditor({
       : <KeyValueEditor entries={body.urlencoded ?? []} onChange={(urlencoded) => onChange({ ...body, urlencoded })} emptyLabel="No URL-encoded fields" />}
     {mode === 'formdata' && <div className="body-mode-note">Choose a local file for each file field. Files are limited to 50 MiB and must be selected again after restarting Relay; file contents and selections are not saved or exported.</div>}
   </div>;
+}
+
+function RelayScriptsEditor({ title, scripts, onChange }: {
+  title: string;
+  scripts: RelayRequestScripts;
+  onChange: (scripts: RelayRequestScripts) => void;
+}): JSX.Element {
+  return <section className="script-scope-editor">
+    <div className="table-caption">{title}</div>
+    <label className="script-code-field">Pre-request<textarea aria-label={`${title} pre-request script`} value={scripts.preRequest ?? ''} maxLength={64 * 1024} onChange={(event) => onChange({ ...scripts, preRequest: event.target.value })} placeholder={'relay.request.headers.push({ key: "X-Run", value: "smoke" });'} spellCheck={false} /></label>
+    <label className="script-code-field">Post-response<textarea aria-label={`${title} post-response script`} value={scripts.postResponse ?? ''} maxLength={64 * 1024} onChange={(event) => onChange({ ...scripts, postResponse: event.target.value })} placeholder={'relay.assert("Request succeeded", relay.response.status < 400);'} spellCheck={false} /></label>
+  </section>;
 }
 
 function FormDataEditor({ entries, onChange }: {

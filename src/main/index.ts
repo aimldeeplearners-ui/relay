@@ -13,6 +13,7 @@ import { serializeRunReportCsv, serializeRunReportHtml } from '../shared/runRepo
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../shared/oauth2PasswordGrant';
 import { buildCurlCommand } from '../shared/curlCommand';
 import { buildMultipartFormData, MAX_FORM_DATA_FILE_BYTES, type SelectedFormDataFile } from '../shared/formData';
+import { runRelayScript } from './scriptRuntime';
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../shared/responseAssertions';
 import { importOpenApiFile } from './openApiImport';
 import { DIAGNOSTIC_LOG_FILE_NAME, getDiagnosticErrorDetails, getDiagnosticLogDirectory, writeDiagnosticLog } from './diagnosticLogger';
@@ -362,48 +363,83 @@ function runAssertions(input: ApiRequestInput, status: number, responseBody: str
 async function executeRequest(input: ApiRequestInput): Promise<ApiResponse> {
   const startedAt = performance.now();
   try {
-    const url = new URL(interpolate(input.request.url, input.environment));
-    for (const [key, value] of enabledEntries(input.request.queryParams, input.environment)) {
+    let scriptedRequest = structuredClone(input.request);
+    let scriptVariables = { ...(input.scriptVariables ?? {}) };
+    const scriptScopes = input.scriptScopes ?? (scriptedRequest.scripts ? [scriptedRequest.scripts] : []);
+    const scriptAssertions: AssertionResult[] = [];
+
+    for (const scope of scriptScopes) {
+      const source = scope.preRequest ?? '';
+      if (!source.trim()) continue;
+      const result = await runRelayScript({
+        source,
+        phase: 'preRequest',
+        request: scriptedRequest,
+        environment: input.environment,
+        variables: scriptVariables,
+      });
+      scriptVariables = result.variables;
+      scriptAssertions.push(...result.assertions);
+      if (result.error || result.assertions.some((assertion) => !assertion.passed)) {
+        const detail = result.error ?? 'A pre-request script assertion failed.';
+        return {
+          status: 0,
+          statusText: 'Pre-request script failed',
+          headers: {},
+          body: '',
+          durationMs: Math.round(performance.now() - startedAt),
+          sizeBytes: 0,
+          tests: [...scriptAssertions, ...(result.error ? [{ label: 'Pre-request script', passed: false, detail }] : [])],
+          scriptVariables,
+          error: detail,
+        };
+      }
+      scriptedRequest = result.request;
+    }
+
+    const scriptEnvironment = { ...input.environment, ...scriptVariables };
+    const scriptedInput: ApiRequestInput = { ...input, request: scriptedRequest, environment: scriptEnvironment };
+    const url = new URL(interpolate(scriptedRequest.url, scriptEnvironment));
+    for (const [key, value] of enabledEntries(scriptedRequest.queryParams, scriptEnvironment)) {
       url.searchParams.append(key, value);
     }
 
     const headers = new Headers();
-    for (const [key, value] of enabledEntries(input.request.headers, input.environment)) headers.set(key, value);
+    for (const [key, value] of enabledEntries(scriptedRequest.headers, scriptEnvironment)) headers.set(key, value);
 
-    const auth = input.request.auth;
+    const auth = scriptedRequest.auth;
     if (auth?.type === 'bearer' && auth.bearer?.token) {
-      headers.set('authorization', `Bearer ${interpolate(auth.bearer.token, input.environment)}`);
+      headers.set('authorization', `Bearer ${interpolate(auth.bearer.token, scriptEnvironment)}`);
     } else if (auth?.type === 'oauth2' && auth.oauth2) {
-      const token = await getPasswordGrantAccessToken(auth.oauth2, input.environment);
+      const token = await getPasswordGrantAccessToken(auth.oauth2, scriptEnvironment);
       headers.set('authorization', `Bearer ${token}`);
     } else if (auth?.type === 'basic' && auth.basic) {
-      const username = interpolate(auth.basic.username, input.environment);
-      const password = interpolate(auth.basic.password, input.environment);
+      const username = interpolate(auth.basic.username, scriptEnvironment);
+      const password = interpolate(auth.basic.password, scriptEnvironment);
       headers.set('authorization', `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`);
     } else if (auth?.type === 'apikey' && auth.apikey) {
-      const key = interpolate(auth.apikey.key, input.environment);
-      const value = interpolate(auth.apikey.value, input.environment);
+      const key = interpolate(auth.apikey.key, scriptEnvironment);
+      const value = interpolate(auth.apikey.value, scriptEnvironment);
       if (auth.apikey.in === 'query') url.searchParams.append(key, value);
       else headers.set(key, value);
     }
 
-    const requestBody = await buildBody(input);
-    if (input.request.body?.mode === 'formdata') headers.delete('content-type');
+    const requestBody = await buildBody(scriptedInput);
+    if (scriptedRequest.body?.mode === 'formdata') headers.delete('content-type');
     if (requestBody.contentType && !headers.has('content-type')) headers.set('content-type', requestBody.contentType);
-    if (input.request.body?.mode === 'xml') headers.set('content-type', 'text/xml; charset=utf-8');
+    if (scriptedRequest.body?.mode === 'xml') headers.set('content-type', 'text/xml; charset=utf-8');
 
     const response = await net.fetch(url.toString(), {
-      method: input.request.method,
+      method: scriptedRequest.method,
       headers,
-      body: ['GET', 'HEAD'].includes(input.request.method) ? undefined : requestBody.body,
+      body: ['GET', 'HEAD'].includes(scriptedRequest.method) ? undefined : requestBody.body,
       signal: AbortSignal.timeout(30_000),
     });
     const body = await response.text();
     const responseHeaders = Object.fromEntries(response.headers.entries());
     const durationMs = Math.round(performance.now() - startedAt);
-    const tests = runAssertions(input, response.status, body, responseHeaders, durationMs);
-
-    return {
+    const tests = [...scriptAssertions, ...runAssertions(scriptedInput, response.status, body, responseHeaders, durationMs)];
+    const scriptResponse: ApiResponse = {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
@@ -411,6 +447,30 @@ async function executeRequest(input: ApiRequestInput): Promise<ApiResponse> {
       durationMs,
       sizeBytes: new TextEncoder().encode(body).byteLength,
       tests,
+    };
+
+    for (const scope of scriptScopes) {
+      const source = scope.postResponse ?? '';
+      if (!source.trim()) continue;
+      const result = await runRelayScript({
+        source,
+        phase: 'postResponse',
+        request: scriptedRequest,
+        environment: scriptEnvironment,
+        variables: scriptVariables,
+        response: scriptResponse,
+      });
+      scriptVariables = result.variables;
+      tests.push(...result.assertions);
+      if (result.error) tests.push({ label: 'Post-response script', passed: false, detail: result.error });
+      scriptResponse.tests = tests;
+    }
+
+    return {
+      ...scriptResponse,
+      tests,
+      executedMethod: scriptedRequest.method,
+      ...(Object.keys(scriptVariables).length ? { scriptVariables } : {}),
     };
   } catch (error) {
     logDiagnostic('warn', 'request.execution_failed', { method: input.request.method, ...getDiagnosticErrorDetails(error) });

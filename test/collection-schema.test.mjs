@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import Ajv from 'ajv';
-import { buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, getOffsetPaginationProgress, getRequestTestCases, getTestCaseVariables, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
+import { approveScriptScopes, buildOffsetPaginationRequest, buildTestCaseEnvironment, collectRunnableRequests, findUnapprovedScriptScopes, getOffsetPaginationProgress, getRequestTestCases, getTestCaseVariables, inferOffsetPaginationOnImport, inspectRunReadiness, isRequestPassing } from '../src/shared/collectionRunner.ts';
 import { partitionCollectionSecrets, redactCollectionSecrets, removeFormDataFileSelections, restoreCollectionSecrets } from '../src/shared/credentialProtection.ts';
 import { buildCurlCommand } from '../src/shared/curlCommand.ts';
 import { buildMultipartFormData } from '../src/shared/formData.ts';
 import { createDebugConsoleEntry } from '../src/shared/debugConsole.ts';
 import { createDiagnosticLogRecord, DIAGNOSTIC_LOG_FILE_NAME, getDiagnosticErrorDetails, MAX_DIAGNOSTIC_LOG_BYTES, writeDiagnosticLog } from '../src/main/diagnosticLogger.ts';
+import { runRelayScript } from '../src/main/scriptRuntime.ts';
 import { countJsonArrayAtPointer, extractResponseVariables } from '../src/shared/responseExtraction.ts';
 import { evaluateJsonPointerAssertions, evaluateResponseHeaderAssertions, evaluateResponseTimeAssertion } from '../src/shared/responseAssertions.ts';
 import { buildOAuth2PasswordGrantRequest, parseOAuth2PasswordGrantResponse } from '../src/shared/oauth2PasswordGrant.ts';
@@ -231,6 +232,70 @@ test('collection runner collects requests depth-first in tree order', () => {
   ];
 
   assert.deepEqual(collectRunnableRequests(items).map((request) => request.name), ['First', 'Second', 'Third']);
+});
+
+test('collection runner inherits collection and folder scripts before request scripts', () => {
+  const items = [{
+    name: 'RAN APIs',
+    scripts: { preRequest: 'relay.variables.set("base", "collection")' },
+    items: [{
+      name: 'Inventory',
+      scripts: { postResponse: 'relay.assert("folder check", true)' },
+      items: [{
+        name: 'List items',
+        request: { method: 'GET', url: 'https://api.example.test/items', scripts: { preRequest: 'relay.variables.set("request", "local")' } },
+      }],
+    }],
+  }];
+
+  const [target] = collectRunnableRequests(items);
+  assert.deepEqual(target.scriptScopes, [
+    items[0].scripts,
+    items[0].items[0].scripts,
+    items[0].items[0].items[0].request.scripts,
+  ]);
+
+  const [selectedFolderTarget] = collectRunnableRequests([items[0].items[0]], '0.0', [items[0].scripts]);
+  assert.deepEqual(selectedFolderTarget.scriptScopes, [
+    items[0].scripts,
+    items[0].items[0].scripts,
+    items[0].items[0].items[0].request.scripts,
+  ]);
+});
+
+test('schema accepts scripts on collections, folders, and requests', () => {
+  const collection = {
+    info: { name: 'Scripted APIs', version: '1.0.0' },
+    items: [{
+      name: 'API collection',
+      scripts: { preRequest: 'relay.variables.set("scope", "collection")' },
+      items: [{
+        name: 'Folder',
+        scripts: { postResponse: 'relay.assert("OK", relay.response.status === 200)' },
+        items: [{
+          name: 'Request',
+          request: {
+            method: 'GET',
+            url: 'https://api.example.test/items',
+            scripts: { preRequest: 'relay.request.headers.push({ key: "X-Test", value: "1" })' },
+          },
+        }],
+      }],
+    }],
+  };
+
+  assert.equal(validateCollection(collection), true, JSON.stringify(validateCollection.errors));
+});
+
+test('script approval is scoped to exact source and ignores empty hooks', () => {
+  const originalScope = { key: '0.1', title: 'Folder: API', scripts: { preRequest: 'relay.request.headers.push({ key: "X-Test", value: "1" });' } };
+  const approvals = approveScriptScopes([originalScope], {});
+
+  assert.deepEqual(findUnapprovedScriptScopes([originalScope], approvals), []);
+  assert.deepEqual(findUnapprovedScriptScopes([
+    { ...originalScope, scripts: { ...originalScope.scripts, postResponse: 'relay.assert("OK", true);' } },
+    { key: '0.2', title: 'Folder: Empty', scripts: {} },
+  ], approvals).map(({ key }) => key), ['0.1']);
 });
 
 test('collection runner passes successful responses and respects configured assertions', () => {
@@ -607,6 +672,109 @@ test('diagnostic logs allowlist metadata, rotate at the size cap, and never stor
   }
 });
 
+test('Relay scripts mutate requests and pass response values through run-scoped variables', async () => {
+  const request = { method: 'GET', url: 'https://api.example.test/items', headers: [] };
+  const pre = await runRelayScript({
+    source: 'relay.request.url += "/{{itemId}}"; relay.variables.set("accessToken", "run-token"); relay.request.headers.push({ key: "Authorization", value: "Bearer " + relay.variables.get("accessToken") });',
+    phase: 'preRequest',
+    request,
+    environment: { itemId: '42' },
+  });
+
+  assert.equal(pre.error, undefined);
+  assert.equal(pre.request.url, 'https://api.example.test/items/{{itemId}}');
+  assert.equal(pre.request.headers[0].value, 'Bearer run-token');
+  assert.equal(pre.variables.accessToken, 'run-token');
+  assert.equal(request.url, 'https://api.example.test/items');
+
+  const post = await runRelayScript({
+    source: 'relay.assert("Created response", relay.response.status === 201); relay.variables.set("createdId", relay.response.jsonBody.id);',
+    phase: 'postResponse',
+    request: pre.request,
+    environment: {},
+    variables: pre.variables,
+    response: { status: 201, statusText: 'Created', headers: {}, body: '{"id":"item-42"}', durationMs: 20, sizeBytes: 16, tests: [] },
+  });
+
+  assert.equal(post.error, undefined);
+  assert.deepEqual(post.assertions, [{ label: 'Created response', passed: true }]);
+  assert.equal(post.variables.accessToken, 'run-token');
+  assert.equal(post.variables.createdId, 'item-42');
+});
+
+test('failed Relay scripts roll back their variable writes and preserve prior run values', async () => {
+  const result = await runRelayScript({
+    source: 'relay.variables.set("temporary", "partial"); throw new Error("script failed");',
+    phase: 'preRequest',
+    request: { method: 'GET', url: 'https://api.example.test/items' },
+    environment: {},
+    variables: { existing: 'prior' },
+  });
+
+  assert.match(result.error, /script failed/i);
+  assert.deepEqual(result.variables, { existing: 'prior' });
+});
+
+test('Relay scripts have no host APIs and infinite loops hit the execution deadline', async () => {
+  const request = { method: 'GET', url: 'https://api.example.test/items' };
+  const sandbox = await runRelayScript({
+    source: 'relay.assert("Host APIs are unavailable", typeof process === "undefined" && typeof require === "undefined" && typeof fetch === "undefined");',
+    phase: 'postResponse',
+    request,
+    environment: {},
+    response: { status: 200, statusText: 'OK', headers: {}, body: '{}', durationMs: 1, sizeBytes: 2, tests: [] },
+  });
+  assert.equal(sandbox.assertions[0].passed, true);
+
+  const timeout = await runRelayScript({ source: 'while (true) {}', phase: 'preRequest', request, environment: {} });
+  assert.match(timeout.error, /time or memory limit/);
+});
+
+test('Relay pre-request scripts can update a request and set run-scoped variables', async () => {
+  const result = await runRelayScript({
+    phase: 'preRequest',
+    source: `relay.request.url = relay.environment.get('baseUrl') + '/items/' + relay.environment.get('itemId');
+relay.request.headers.push({ key: 'X-Test', value: 'ready' });
+relay.variables.set('nextId', '42');
+relay.assert('URL prepared', relay.request.url.endsWith('/items/42'));`,
+    request: { method: 'GET', url: 'https://old.example.test/items', headers: [] },
+    environment: { baseUrl: 'https://api.example.test', itemId: '42' },
+  });
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.request.url, 'https://api.example.test/items/42');
+  assert.equal(result.request.headers[0].value, 'ready');
+  assert.equal(result.variables.nextId, '42');
+  assert.deepEqual(result.assertions, [{ label: 'URL prepared', passed: true }]);
+});
+
+test('Relay post-response scripts can inspect relay.response and assert results', async () => {
+  const result = await runRelayScript({
+    phase: 'postResponse',
+    source: `relay.assert('Created', relay.response.status === 201);
+relay.variables.set('createdId', JSON.parse(relay.response.body).id);
+relay.assert('No host APIs', typeof process === 'undefined' && typeof require === 'undefined' && typeof fetch === 'undefined');`,
+    request: { method: 'POST', url: 'https://api.example.test/items' },
+    environment: {},
+    response: { status: 201, statusText: 'Created', headers: {}, body: '{"id":42}', durationMs: 10, sizeBytes: 9, tests: [] },
+  });
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.variables.createdId, '42');
+  assert.deepEqual(result.assertions.map(({ passed }) => passed), [true, true]);
+});
+
+test('Relay scripts stop at the CPU deadline', async () => {
+  const result = await runRelayScript({
+    phase: 'preRequest',
+    source: 'while (true) {}',
+    request: { method: 'GET', url: 'https://api.example.test/items' },
+    environment: {},
+  });
+
+  assert.match(result.error, /time or memory limit/);
+});
+
 test('run readiness blocks missing variables and reports each variable without exposing its value', () => {
   const requests = [
     { name: 'Read one', request: { method: 'GET', url: 'https://api.example.test/items', headers: [{ key: 'Authorization', value: 'Bearer {{token}}' }] } },
@@ -620,7 +788,7 @@ test('run readiness blocks missing variables and reports each variable without e
     requestNames: ['Read one', 'Read two'],
   }]);
   assert.deepEqual(readiness.warnings, [{
-    message: 'No response assertions or extractions are configured; HTTP status alone determines pass/fail.',
+    message: 'No declarative response assertions or extractions are configured; HTTP status and any script assertions determine pass/fail.',
     requestNames: ['Read one', 'Read two'],
   }]);
 });

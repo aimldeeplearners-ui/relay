@@ -46,6 +46,7 @@
         "name": { "type": "string" },
         "type": { "type": "string", "enum": ["collection", "folder"] },
         "description": { "type": "string" },
+        "scripts": { "$ref": "#/definitions/RequestScripts" },
         "items": {
           "type": "array",
           "items": { "$ref": "#/definitions/CollectionItem" }
@@ -89,6 +90,7 @@
             "additionalProperties": false
           }
         },
+        "scripts": { "$ref": "#/definitions/RequestScripts" },
         "headers": {
           "type": "array",
           "items": { "$ref": "#/definitions/KeyValue" }
@@ -190,6 +192,14 @@
         }
       },
       "required": ["method", "url"]
+    },
+    "RequestScripts": {
+      "type": "object",
+      "properties": {
+        "preRequest": { "type": "string" },
+        "postResponse": { "type": "string" }
+      },
+      "additionalProperties": false
     },
     "FormDataEntry": {
       "type": "object",
